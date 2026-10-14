@@ -4,6 +4,9 @@ Source: the street areas of Helsinki's register of public areas (YLRE_Katualue_a
 CC BY 4.0). Each polygon is cut into 300 m cells; every piece longer than it is wide gets one label at its centre,
 turned along its long side. Tier 1 (main streets and motorways, by the register's own class) shows from afar,
 tier 2 only up close. Streets not built yet are left out.
+
+Also why each street in an address got its name, for the building card: the city's place-name register
+(Nimisto_piste_rekisteritiedot, CC BY 4.0) gives the reason, and for many an older history of the name, in Finnish.
 """
 import json
 import math
@@ -11,6 +14,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import shapely
 from shapely.geometry import box
 
@@ -47,7 +51,20 @@ def placement(p):
             round(float(width), 1)]
 
 
+def origins() -> dict:
+    """{street name: [why it was given, its history]} for the streets in the buildings' addresses."""
+    names = set(pd.read_parquet("data/buildings.parquet", columns=["katunimi_suomi"]).katunimi_suomi.dropna())
+    n = gpd.read_file("data/raw/Nimisto_piste_rekisteritiedot.geojson")
+    n = n[n.nimi_suomi.isin(names) & (n.nimeamisperuste.notna() | n.lisatieto.notna())]
+    n = n.sort_values("laji_selite", key=lambda s: s != "Katu").drop_duplicates("nimi_suomi")  # a street before a park
+    n = n.fillna({"nimeamisperuste": "", "lisatieto": ""})
+    return {r.nimi_suomi: [r.nimeamisperuste.strip(), r.lisatieto.strip()] for r in n.itertuples()}
+
+
 def main():
+    names = origins()
+    Path("web/data/streets.json").write_text(json.dumps(names, ensure_ascii=False, separators=(",", ":")))
+    print(len(names), "street names explained;", Path("web/data/streets.json").stat().st_size // 1024, "KB")
     streets = gpd.read_file("data/raw/YLRE_Katualue_alue.geojson")
     streets = streets[streets.geometry.notna() & (streets.rakentamisen_tila != "Rakentamaton")]
     labels = []

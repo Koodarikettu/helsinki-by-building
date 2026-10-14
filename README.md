@@ -1,7 +1,10 @@
 # Helsinki, building by building
 
 Every building in Helsinki, 85,000 of them, coloured by the year it was completed, with the protection the city's
-plans give it, the national heritage areas it stands in and what Wikidata and Wikipedia say about it.
+plans give it, the national heritage areas it stands in and what Wikidata and Wikipedia say about it. Back in time,
+the 4,800 buildings demolished since 2008 stand again, and the city's old maps and aerial photos can lie under them.
+The Energy colouring shows energy labels and how much solar power each roof could give, and the card tells why the
+building's street is so named.
 
 A non-commercial project, made for curiosity and learning. It is a fork of Alexander Barakov's
 [Amsterdam, building by building](https://github.com/alexbarakov/amsterdam-by-building) (MIT), which was inspired by
@@ -26,23 +29,24 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 
 | Step | What it does |
 |---|---|
-| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points), roof heights from its 3D city model, Museovirasto's RKY areas, Wikidata's buildings and the City Museum's photos in Finna |
-| `s01_load` | Buildings → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's feature id) |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, HSY's solar potential, the public energy certificates, Wikidata's buildings and the City Museum's photos in Finna |
+| `s01_load` | Buildings, standing and demolished → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's or the model's feature id) |
 | `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
 | `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes, addresses and the city config |
 | `s04_water` | Water and land polygons |
 | `s05_layers` | Context layers: protected in the local plan, RKY areas, buildings in Wikipedia; a bit per group per building |
 | `s06_wiki` | Names, architects, styles, Wikipedia extracts and Commons photos for buildings with a Wikidata item |
-| `s07_labels` | Street names placed along their street areas |
+| `s07_labels` | Street names placed along their street areas, and why each street in an address is so named |
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
+| `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
 
 ## Run it
 
 ```bash
 uv sync
-for s in s00_fetch s01_load s02_attributes s05_layers s06_wiki s08_archive s09_quests s03_tiles s04_water s07_labels; do uv run python -m pipeline.$s; done
-uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s08   # year logic, address parsing
+for s in s00_fetch s01_load s02_attributes s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels; do uv run python -m pipeline.$s; done
+uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10   # years, addresses, energy
 python3 -m http.server 8642 --directory web
 ```
 
@@ -56,8 +60,8 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
 - **Rounded decades.** Before 1930 the register rounds many dates to the decade: 1900 has 170 buildings against about
   33 a year around it, and 1850, 1880 and 1890 run five to ten times over too; from 1930 on the decades match their
   neighbours. So 1900 is not a placeholder like Amsterdam's 1905 but the oldest dates being approximate. On each
-  round decade before 1930, as many buildings as the years around it predict keep their year; the rest (497 in all)
-  are spread across the decade, drawn paler and marked "c." / "n.".
+  round decade before 1930, as many buildings as the years around it predict keep their year; the rest (512 in all,
+  demolished buildings included) are spread across the decade, drawn paler and marked "c." / "n.".
 - **Missing years.** 34,652 buildings have no year and six carry the placeholder 1000 or 1001 (all on one property in
   Santahamina). Nearly all are sheds, storehouses, outbuildings, garages and summer cottages: buildings with a year
   hold 99.6% of the floor area. Their year is the median of the dated buildings on the same property
@@ -85,12 +89,25 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   card shows each building's own plan, marking and the first sentence of its regulation (in Finnish). A building in
   several plans takes the strongest marking.
 - **RKY.** Buildings are matched by location: everything inside an area lights up, new buildings included.
-- **Wikidata.** Items are linked by the permanent building identifier (P3824 = VTJ-PRT): 4,627 items on 4,561
-  buildings. Most give a name and a completion year (which matches the register for 3,513 of 4,245 buildings; 148
+- **Wikidata.** Items are linked by the permanent building identifier (P3824 = VTJ-PRT): 4,641 items on 4,575
+  buildings, 14 of them demolished. Most give a name and a completion year (which matches the register for 3,513 of 4,245 buildings; 148
   differ by more than ten years, mostly the register being later; not used). Extracts are the article's
   introduction cut at 450 characters. Oodi has no linked item: its Wikidata item carries no VTJ-PRT for this building.
 - **Street names.** From the street areas of the register of public areas, placed as in Amsterdam: tier 1 (shown from
-  afar) is the register's own class for main streets and motorways; streets not yet built are left out.
+  afar) is the register's own class for main streets and motorways; streets not yet built are left out. Why a street
+  is so named comes from the city's place-name register (`Nimisto_piste_rekisteritiedot`): its reason for the name
+  and, for many, an older history of it, in Finnish only. 2,936 of the 3,620 streets in the buildings' addresses have
+  one; a pinned card shows it for the street of the building's address.
+- **Energy labels.** Varke's energy certificate register publishes every certificate in force as one CSV
+  (146,383 in Finland); those of houses with one or two homes are not public. Matched by VTJ-PRT: 14,987 buildings,
+  the one signed last where a building has several. The register offers the file for anyone to download but states no
+  licence for it. The 2013 and 2018 scales place the class limits differently, so the card gives the scale with the
+  E-value.
+- **Solar potential.** HSY's photovoltaic potential (2015): the yearly output if every suitable part of the roof
+  carried panels, 15 % efficient. Its building outlines are its own; each goes to the building of ours its inside
+  point falls in, and several in one add up. Its outlines are newer than its estimates, which give zero to nearly
+  every building completed after 2010 (2009: 28 %, as across the city; 2012: 69 %; 2015: 96 %), so those get none:
+  43,898 buildings have an estimate, 30,046 above zero. Coloured in steps of 5, 10, 25, 50, 100, 250 and 500 MWh.
 - **Archive photos.** All of the Helsinki City Museum's images in Finna are downloaded (about 83,000 records, 834
   pages) and matched by the address that ends their place (`subjectPlaces`), rather than searched address by address:
   a free-text search for "Aleksanterinkatu 52" returns hundreds of loose hits, while the place field names the
@@ -102,12 +119,29 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   step whose claims are not word for word in its Wikipedia article, whose place is not found, or whose year is not
   the map's year for the building. The hard walk uses 1800s photos from the City Museum as clues; Oodi, Kiasma and the
   National Theatre are reached by their address, since Wikidata does not link them to their buildings.
-- **Aerial view.** The Aerial mode streams the city's photogrammetric mesh from its 2024 aerial photos
-  (`kartta.hel.fi/3d/mesh/Helsinki_2024/2/`, 3D Tiles) into the same scene with
+- **Demolished buildings.** The 3D city model keeps the buildings demolished since 2008 as a layer of its own (LoD1,
+  3D Tiles): 4,815, each with its year of demolition (2008–2026, most from 2016 on) and about half with a year of
+  construction, a height, a use and a VTJ-PRT. `s01_load` takes each outline from the union of its roof's triangles;
+  where the register lists the same building unchanged, the outlines meet to within a metre. The 13 the register still lists
+  are left to the register, and 32 with no roof are dropped: 4,770 remain. A missing year is estimated as for the
+  register's buildings, and always falls before the demolition. They stand from their year to the year they were
+  torn down, paler than the buildings of today, and count in the tally for those years; they belong to no context
+  layer. The card gives both years and links the 3D city model instead of the register.
+- **Old maps.** The "Old maps" switch lays the city's map or orthophoto of the year shown, or the nearest before it,
+  under the buildings, streamed from the city's WMS (`kartta.hel.fi/ws/geoserver/avoindata/wms`, ETRS-GK25) in a
+  quadtree of 512 px tiles that splits where its pixels would show larger than the screen's. Maps: 1749, 1780, 1820,
+  1838, 1870, 1878, 1900, 1909, 1917 and 1925; orthophotos: 1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996, 2008,
+  2017, 2021 and 2025. The other years cover only a strip of the city or leave holes, as measured on an overview of
+  each layer; the 1800s plan is too faint to read. The server paints black outside a map's sheet and where a photo
+  has nothing, and the map leaves black out. The maps are georeferenced: Senaatintori falls on the square in each.
+- **Aerial view.** The Aerial mode streams the city's photogrammetric mesh from its 2017 or 2024 aerial photos
+  (`kartta.hel.fi/3d/mesh/Helsinki_2017/`, `Helsinki_2024/2/`, 3D Tiles) into the same scene with
   [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS); nothing is downloaded by the pipeline. The
   globe is turned to east, up and south at Senaatintori and by the grid's meridian convergence (−0.041°), which keeps
   it within 7 cm of ETRS-GK25 across the city; each tile is then stood upright and lifted by the earth's curvature
-  (10 m at Vuosaari), so the sea reads 0 m in the centre and in Vuosaari alike. The mesh's heights are N2000 already.
+  (10 m at Vuosaari), so the sea reads 0 m in the centre and in Vuosaari alike. The 2024 mesh's heights are N2000
+  already; 2017's are above the ellipsoid and are dropped by the geoid's 17.6 m, after which the two meshes agree to
+  0.1 m in the centre and in Vuosaari. 2015's mesh is glTF 1.0, which three.js no longer reads, so it is not offered.
   A click finds the point it hits in the mesh and the building whose block stands under it.
 - **Known differences.** Checked against five landmarks: the Cathedral (registered as Hallituskatu 7) 1852, the
   Sederholm house 1757, Kiasma 1998 and Oodi 2018 are right; the Railway Station gives 1909 (completed 1919).
@@ -140,8 +174,20 @@ Data keeps the licence of its source:
   the city information model's LoD2 buildings as 3D Tiles. CC BY 4.0. The model's WFS
   (`kartta.hel.fi/3d/citydb-wfs/wfs`) answered 503 on 14 October 2026; the 3D Tiles behind the city's own 3D viewer
   carry the same buildings and attributes.
+- Demolished buildings: City of Helsinki, [Helsingin 3D-kaupunkimallit](https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli),
+  the city information model's demolished LoD1 buildings as 3D Tiles. CC BY 4.0.
 - Aerial view: City of Helsinki, [Helsingin 3D-kaupunkimallit](https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli),
-  the photogrammetric mesh (kolmioverkkomalli) from 2024 aerial photos, streamed from the city's server. CC BY 4.0.
+  the photogrammetric meshes (kolmioverkkomalli) from 2017 and 2024 aerial photos, streamed from the city's server.
+  CC BY 4.0.
+- Old maps: City of Helsinki, [Helsingin ortoilmakuvat](https://hri.fi/data/fi/dataset/helsingin-ortoilmakuvat) and
+  [Helsingin historialliset kartat](https://hri.fi/data/fi/collection/helsingin-historialliset-kartat), WMS layers
+  `avoindata:Ortoilmakuva_*` and the maps named in `web/app.js`, streamed from the city's map server. CC BY 4.0.
+- Why streets are so named: City of Helsinki, [Helsingin nimistö](https://hri.fi/data/fi/dataset/helsingin-nimisto),
+  WFS layer `Nimisto_piste_rekisteritiedot`. CC BY 4.0.
+- Energy labels: Varke (Valtion tukeman asuntorakentamisen keskus), the public CSV of the
+  [energy certificate register](https://www.energiatodistusrekisteri.fi/), downloaded on 14 October 2026. No licence stated.
+- Solar potential: HSY, [Pääkaupunkiseudun aurinkosähköpotentiaali](https://hri.fi/data/fi/dataset/paakaupunkiseudun-aurinkosahkopotentiaali),
+  WFS layer `ilmasto_ja_energia:rakennukset_aurinkosahkopotentiaali`. CC BY 4.0.
 - Archive photos: Helsinki City Museum (Helsingin kaupunginmuseo) via the [Finna API](https://api.finna.fi). Public
   domain mark or CC BY 4.0, per photo. The museum asks that the photographer and Helsingin kaupunginmuseo are named;
   the card does, links the Finna record and loads the image from Finna. The app stores only record ids, years,

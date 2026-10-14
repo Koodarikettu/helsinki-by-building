@@ -12,10 +12,12 @@ const GROUP_COLORS = ['#ec0000', '#1f4e8c', '#d99a12', '#2e8b57', '#7b3fa0', '#0
 const MAX_GROUPS = GROUP_COLORS.length;
 const ATTR_W = 256;
 const WORKERS = Math.min(4, navigator.hardwareConcurrency || 2);
-const MODE = { period: 0, floors: 1, energy: 2, layers: 3 };
-// Energy labels G … A+++++ (index 1–12; 0 = no label), from red through yellow to deep green.
-const ENERGY_COLORS = ['#efeee9', '#c1272d', '#e4572e', '#f08a24', '#f6c445', '#c9d64a', '#8cc152', '#4caf50',
-  '#2e9a49', '#1d8040', '#126b35', '#0b5a2c', '#064a24'];
+// Solar shares the Energy button: the panel switches between the two.
+const MODE = { period: 0, floors: 1, energy: 2, layers: 3, solar: 4 };
+// Energy labels G … A (index 1–7; 0 = no label), from red through yellow to green.
+const ENERGY_COLORS = ['#efeee9', '#c1272d', '#e4572e', '#f08a24', '#f6c445', '#c9d64a', '#8cc152', '#2e9a49'];
+// Solar potential: none, no suitable roof, then the steps of config.solar.steps from pale yellow to deep orange.
+const SOLAR_COLORS = ['#efeee9', '#c4c9cc', '#fbeeb0', '#f9dc7a', '#f6c445', '#f0a830', '#e88a24', '#d9661f', '#bf4a1c', '#8f2f14'];
 
 const [config, layers, attrBuf, info] = await Promise.all([
   fetch('data/helsinki.json').then(r => r.json()),
@@ -76,7 +78,8 @@ const FI_UI = {
   'Wikidata records this building as their place of work.': 'Wikidatan mukaan henkilö työskenteli tässä.',
   'Wikidata records this building as their birthplace.': 'Wikidatan mukaan henkilö syntyi tässä.',
   'Wikidata records this building as the place where they died.': 'Wikidatan mukaan henkilö kuoli tässä.',
-  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva',
+  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva', 'Old maps': 'Vanhat kartat', 'Aerial photo': 'Ilmakuva', 'Map': 'Kartta',
+  'Year of the aerial photos': 'Ilmakuvien vuosi',
   'buildings': 'rakennusta', 'Building the city': 'Kaupunkia rakennetaan',
   'Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.': 'Käännä vetämällä. Siirrä oikealla painikkeella tai Shift-vedolla. Zoomaa rullalla.',
   'Show legend': 'Näytä selite', 'Hide legend': 'Piilota selite',
@@ -88,7 +91,12 @@ const FI_UI = {
   'In layers': 'Tasoissa', 'Dating': 'Ajoitus', 'Read more': 'Lue lisää', 'From the street': 'Kadulta',
   'Lived or worked here': 'Asui tai työskenteli täällä', 'Source': 'Lähde', 'Photo': 'Kuva',
   'Wikipedia': 'Wikipedia', 'Finnish Wikipedia': 'Suomenkielinen Wikipedia', 'Helsinki building register': 'Helsingin rakennusrekisteri',
-  'The register gives': 'Rekisteri antaa', 'c. ': 'n. ',
+  'The register gives': 'Rekisteri antaa', 'c. ': 'n. ', 'The 3D city model gives': '3D-kaupunkimalli antaa',
+  'Energy label': 'Energialuokka', 'Solar potential': 'Aurinkosähköpotentiaali', 'no suitable roof': 'ei sopivaa kattoa',
+  'Street name, in Finnish': 'Kadun nimi', 'History of the name': 'Nimen historia', 'Energy certificate register': 'Energiatodistusrekisteri',
+  'HSY solar potential': 'HSY:n aurinkosähköpotentiaali', 'Helsinki place names': 'Helsingin nimistö', 'MWh a year': 'MWh vuodessa',
+  'Demolished': 'Purettu', 'Demolished building': 'Purettu rakennus', 'Helsinki 3D city model': 'Helsingin 3D-kaupunkimalli',
+  'The 3D city model gives no year. Estimated from the nearest dated buildings, before the year it was demolished.': '3D-kaupunkimallissa ei ole vuotta. Arvioitu lähimpien rakennusten vuosista, ennen purkuvuotta.',
   'Click for the story and sources': 'Napsauta: tarina ja lähteet', 'Click to keep this card open': 'Napsauta pitääksesi kortin auki',
   'Play the city\'s growth': 'Toista kaupungin kasvu', 'Pause': 'Tauko', 'Close': 'Sulje',
   'The register gives a round decade here, more often than the years around it predict. Read it as “around then”.': 'Rekisteri antaa tässä tasakymmenen useammin kuin ympäröivät vuodet antaisivat odottaa. Lue se ”noihin aikoihin”.',
@@ -263,6 +271,7 @@ const uniforms = {
   uGroupColor: { value: GROUP_COLORS.map(col) },
   uMaquette: { value: col(MAQUETTE) },
   uEnergy: { value: ENERGY_COLORS.map(col) },
+  uSolar: { value: SOLAR_COLORS.map(col) },
   uHover: { value: -1 },
   uSelected: { value: -1 },
   uBlind: { value: 0 },
@@ -279,7 +288,8 @@ const VERT = /* glsl */`
   uniform int uGroupBit[${MAX_GROUPS}];
   uniform vec3 uGroupColor[${MAX_GROUPS}];
   uniform vec3 uMaquette;
-  uniform vec3 uEnergy[13];
+  uniform vec3 uEnergy[${ENERGY_COLORS.length}];
+  uniform vec3 uSolar[${SOLAR_COLORS.length}];
   out vec3 vColor;
   out vec3 vWorld;
   out float vGid;
@@ -304,12 +314,13 @@ const VERT = /* glsl */`
     float year = a.x;
     int pf = int(a.y + 0.5);
     int period = pf % 16;
-    int flag = pf / 16;
+    int flag = pf / 16 % 16;
+    float gone = float(pf / 256);  // the year it was demolished, 0 if it stands
     vGid = a.w;
     float vis = uMode < 1.5 ? uMask[period] : 1.0;
     float g = clamp((uYear - year + 1.0) / uRise, 0.0, 1.0);
     g = g * g * (3.0 - 2.0 * g);
-    if (g <= 0.003 || vis <= 0.003) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    if (g <= 0.003 || vis <= 0.003 || (gone > 0.0 && uYear >= gone)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
     // Entrances, only while the film plays and while tiles load: a building drops in from its own side of the
     // sky, the same side every time (seeded by its id). Filters and scrubbing change the city at once.
@@ -332,7 +343,9 @@ const VERT = /* glsl */`
     } else if (uMode < 1.5) {
       c = floorsRamp(mod(a.z, 128.0));
     } else if (uMode < 2.5) {
-      c = uEnergy[int(a.z / 128.0)];
+      c = uEnergy[int(mod(a.z / 128.0, 8.0))];
+    } else if (uMode > 3.5) {
+      c = uSolar[int(a.z / 1024.0)];
     } else {
       c = uMaquette;
       for (int g = 0; g < ${MAX_GROUPS}; g++) {
@@ -347,6 +360,7 @@ const VERT = /* glsl */`
       }
     }
     if (year <= uYearFrom) c = mix(c, uMaquette, 0.8);
+    if (gone > 0.0) c = mix(c, vec3(1.0), 0.6);  // a ghost: torn down since
     // A quest's question about one building turns it red; a year riddle also hides every other age.
     if (uBlind > 0.5 && vGid == uSelected) c = vec3(0.925, 0.0, 0.0);
     else if (uBlind > 0.5 && uBlind < 1.5) c = uMaquette;
@@ -448,8 +462,8 @@ function pick(x, y) {
   const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
   camera.setViewOffset(w, h, x, y, 1, 1);
   for (const m of meshes) m.material = m.userData.pick;
-  flat.visible = false;
-  labelGroup.visible = false;
+  const groundShown = ground.visible;
+  flat.visible = labelGroup.visible = ground.visible = false;
   renderer.setRenderTarget(pickTarget);
   renderer.setClearColor(0x000000, 0);
   renderer.clear();
@@ -457,31 +471,37 @@ function pick(x, y) {
   renderer.readRenderTargetPixels(pickTarget, 0, 0, 1, 1, pickPixel);
   renderer.setRenderTarget(null);
   renderer.setClearColor(SKY, 1);
-  flat.visible = true;
-  labelGroup.visible = true;
+  flat.visible = labelGroup.visible = true;
+  ground.visible = groundShown;
   for (const m of meshes) m.material = m.userData.draw;
   camera.clearViewOffset();
   return pickPixel[0] + pickPixel[1] * 256 + pickPixel[2] * 65536 - 1;
 }
 
 // ---------- Aerial view ----------
-// The city's photogrammetric mesh from its 2024 aerial photos (3D Tiles, CC BY 4.0), streamed from the city's server
-// as a view of its own: the coloured blocks, land and names hide. Loaded on first use.
-const PHOTO_URL = 'https://kartta.hel.fi/3d/mesh/Helsinki_2024/2/tileset.json';  // 1/ is an untextured floor
+// The city's photogrammetric mesh from its aerial photos of 2017 or 2024 (3D Tiles, CC BY 4.0), streamed from the
+// city's server as a view of its own: the coloured blocks, land and names hide. Loaded on first use. (2015's mesh is
+// glTF 1.0, which three.js no longer reads.)
+// [tileset, metres to drop it by]: 2024's heights are N2000 written as heights above the ellipsoid (the sea reads
+// 0.2–0.4 m); 2017's are true heights above the ellipsoid, 17.6 m higher (the geoid): dropped by that, the two
+// meshes meet to within 0.1 m by the cathedral and in Vuosaari, 11 km apart.
+const PHOTOS = {
+  2017: ['https://kartta.hel.fi/3d/mesh/Helsinki_2017/tileset.json', 17.6],
+  2024: ['https://kartta.hel.fi/3d/mesh/Helsinki_2024/2/tileset.json', 0],  // 1/ is an untextured floor
+};
 const DEG = THREE.MathUtils.DEG2RAD;
-let photo = null, photoLoad = null, photoOn = false;
+let photo = null, photoLoad = null, photoOn = false, photoYear = 2024;
 async function loadPhoto() {
   const [{ TilesRenderer, WGS84_ELLIPSOID: E }, { GLTFLoader }, { DRACOLoader }] = await Promise.all([
     import('./vendor/3d-tiles-renderer/index.three.js'),
     import('three/addons/loaders/GLTFLoader.js'),
     import('three/addons/loaders/DRACOLoader.js'),
   ]);
-  const tiles = new TilesRenderer(PHOTO_URL);
+  const [url, geoid] = PHOTOS[photoYear], tiles = new TilesRenderer(url);
   const draco = new DRACOLoader().setDecoderPath('vendor/three-addons/libs/draco/');
   tiles.manager.addHandler(/\.gltf$/, new GLTFLoader(tiles.manager).setDRACOLoader(draco));  // b3dm tiles, Draco-packed
   // Globe to map: east, up and south at Senaatintori, turned by the meridian convergence so that x and z follow the
-  // ETRS-GK25 grid (central meridian 25° E). One turn holds to 7 cm across the city. The mesh's heights are N2000
-  // written as heights above the ellipsoid (the sea reads 0.2–0.4 m), so they need no geoid.
+  // ETRS-GK25 grid (central meridian 25° E). One turn holds to 7 cm across the city.
   const lat = 60.1694 * DEG, lon = 24.9527 * DEG, g = (lon - 25 * DEG) * Math.sin(lat), c = Math.cos(g), s = Math.sin(g);
   const toMap = new THREE.Matrix4().set(c, -s, 0, 0, 0, 0, 1, 0, -s, -c, 0, 0, 0, 0, 0, 1)
     .multiply(E.getEastNorthUpFrame(lat, lon, 0, new THREE.Matrix4()).invert());
@@ -495,13 +515,16 @@ async function loadPhoto() {
     E.getCartographicToNormal(geo.lat, geo.lon, up).transformDirection(toMap);
     mid.applyMatrix4(toMap);
     turn.makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(up, new THREE.Vector3(0, 1, 0)))
-      .premultiply(new THREE.Matrix4().makeTranslation(mid.x, geo.height, mid.z))
+      .premultiply(new THREE.Matrix4().makeTranslation(mid.x, geo.height - geoid, mid.z))
       .multiply(new THREE.Matrix4().makeTranslation(-mid.x, -mid.y, -mid.z));
     scene.matrix.premultiply(toMap).premultiply(turn).premultiply(fromMap);
     scene.matrix.decompose(scene.position, scene.quaternion, scene.scale);
-    // The photos are sRGB and drawn as they are, like every other colour here.
-    scene.traverse(o => { if (o.material?.map) o.material.map.colorSpace = THREE.NoColorSpace; });
+    // The photos are sRGB and drawn as they are, like every other colour here; streets and walls are seen at a slant.
+    scene.traverse(o => { if (o.material?.map) Object.assign(o.material.map, { colorSpace: THREE.NoColorSpace, anisotropy: 8 }); });
   });
+  // Every tile carries a 1024² photo, some 5 MB once drawn, and a close look at the centre takes ~130 of them (750 MB).
+  // The default 0.4 GB fills at 86 and refuses the finer ones, which leaves the near city blurred. Phones keep it.
+  if (!phone.matches) Object.assign(tiles.lruCache, { minBytesSize: 0.75 * 2 ** 30, maxBytesSize: 2 ** 30 });
   tiles.setCamera(camera);
   tiles.setResolutionFromRenderer(camera, renderer);
   scene.add(tiles.group);
@@ -511,11 +534,23 @@ async function setPhoto(on) {
   photoOn = on;
   document.body.classList.toggle('photo', on);
   document.querySelector('.photo-mode').setAttribute('aria-pressed', on);
-  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !on && +b.dataset.mode === uniforms.uMode.value));
+  const m = uniforms.uMode.value === MODE.solar ? MODE.energy : uniforms.uMode.value;
+  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !on && +b.dataset.mode === m));
   blocks.visible = flat.visible = labelGroup.visible = !on;
   if (on) { if (playing) stopPlay(); pinCard(-1); }
   if (on || photoLoad) (await (photoLoad ??= loadPhoto())).group.visible = photoOn;
 }
+// Another year's mesh replaces the one shown: two would hold two gigabytes.
+async function setPhotoYear(y) {
+  photoYear = y;
+  document.querySelectorAll('.photo-years button').forEach(b => b.setAttribute('aria-pressed', +b.dataset.year === y));
+  const old = photoLoad;
+  photoLoad = photo = null;
+  const t = await old;
+  if (t) { scene.remove(t.group); t.dispose(); }
+  if (photoOn) setPhoto(true);
+}
+document.querySelectorAll('.photo-years button').forEach(b => b.onclick = () => +b.dataset.year !== photoYear && setPhotoYear(+b.dataset.year));
 // A click in the aerial view finds the point it hits, then the block standing under that point: the building's
 // footprint decides, wherever the ground lies.
 const ray = new THREE.Raycaster();
@@ -528,6 +563,101 @@ function pickPhoto(x, y) {
   const b = ray.intersectObjects(meshes, false)[0];
   // vGid in the vertex shader: the attribute texture's fourth channel, two texels per building
   return b ? b.object.userData.draw.uniforms.uAttr.value.image.data[8 * b.object.geometry.attributes.bld.getX(b.face.a) + 3] : -1;
+}
+
+// ---------- Old maps and aerial photos ----------
+// On the ground under the year's buildings, when switched on: the city's map or aerial photo of that year or the
+// nearest before it (WMS in ETRS-GK25, CC BY 4.0). A quadtree of 512 px tiles, each split once its pixels would show
+// larger than the screen's. Outside a map's sheet, and where a photo has nothing, the server paints black: left out.
+const GROUND_WMS = 'https://kartta.hel.fi/ws/geoserver/avoindata/wms';
+const GROUND = [
+  [1749, 'Pitajakuvauskartta_1749'], [1780, 'Rekognosointikartta_1780_1782'], [1820, 'Asemakaavakartta_1820'],
+  [1838, 'Asemakaavakartta_1838'], [1870, 'Senaatinkartta_1870'], [1878, 'Asemakaavakartta_1878'],
+  [1900, 'Plan_af_Helsingfors_1900'], [1909, 'Kartta_Helsingin_kaupungista_ja_sen_alueista_1909'],
+  [1917, 'Helsingin_kaupunki_1917_1918'], [1925, 'Helsingin_kaupungin_kartta_1925'],
+  ...[1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996].map(y => [y, `Ortoilmakuva_${y}`]),
+  [2008, 'Ortoilmakuva_2008_25cm'], [2017, 'Ortoilmakuva_2017_20cm'], [2021, 'Ortoilmakuva_2021_10cm'],
+  [2025, 'Ortoilmakuva_2025_5cm'],
+];  // years whose map or photo covers the city; the rest cover a strip or leave holes
+const GROUND_ROOT = 65536, GROUND_PX = 512;
+const GROUND_SHADER = {
+  glslVersion: THREE.GLSL3,
+  depthTest: false,  // drawn after the land and water, over them; the buildings come after and stand on it
+  vertexShader: 'out vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `precision highp float; uniform sampler2D map; in vec2 vUv; out vec4 outColor;
+    void main() { vec3 c = texture(map, vUv).rgb; if (max(c.r, max(c.g, c.b)) < 0.035) discard; outColor = vec4(c, 1.0); }`,
+};
+const ground = new THREE.Group();
+scene.add(ground);
+land.renderOrder = water.renderOrder = -2;
+const groundTiles = new Map(), groundLoader = new THREE.TextureLoader();
+const groundGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+let groundOn = false, groundSrc = null, groundPrev = null;
+const groundAt = Y => GROUND.findLast(([y]) => y <= Y);
+
+function groundTile(src, L, i, j, load) {
+  const key = `${src}/${L}/${i}/${j}`;
+  let t = groundTiles.get(key);
+  if (!t && load) {
+    const s = GROUND_ROOT / 2 ** L, x = -GROUND_ROOT / 2 + i * s, z = -GROUND_ROOT / 2 + j * s;
+    const e = config.origin[0] + x, n = config.origin[1] - z;  // west and north edges; WMS 1.3.0 puts northing first
+    groundTiles.set(key, t = { mesh: null, ready: false, used: 0 });
+    groundLoader.load(`${GROUND_WMS}?service=WMS&version=1.3.0&request=GetMap&layers=avoindata:${src}&styles=&crs=EPSG:3879` +
+      `&bbox=${n - s},${e},${n},${e + s}&width=${GROUND_PX}&height=${GROUND_PX}&format=image/jpeg&bgcolor=0x000000`, tex => {
+      Object.assign(tex, { colorSpace: THREE.NoColorSpace, anisotropy: 8 });
+      t.mesh = new THREE.Mesh(groundGeo, new THREE.ShaderMaterial({ ...GROUND_SHADER, uniforms: { map: { value: tex } } }));
+      t.mesh.position.set(x + s / 2, 0.1, z + s / 2);
+      t.mesh.scale.set(s, 1, s);
+      t.mesh.renderOrder = -1;
+      ground.add(t.mesh);
+      t.ready = true;
+    }, undefined, () => { t.ready = true; });
+  }
+  if (t) t.used = frame;
+  return t;
+}
+
+const frustum = new THREE.Frustum(), gbox = new THREE.Box3(), projView = new THREE.Matrix4();
+function inView(L, i, j) {
+  const s = GROUND_ROOT / 2 ** L, x = -GROUND_ROOT / 2 + i * s, z = -GROUND_ROOT / 2 + j * s;
+  gbox.min.set(x, 0, z); gbox.max.set(x + s, 1, z + s);
+  return frustum.intersectsBox(gbox);
+}
+function updateGround() {
+  ground.visible = groundOn && !photoOn;
+  if (!ground.visible) return;
+  const src = groundAt(uniforms.uYear.value)?.[1] ?? null;
+  if (src !== groundSrc) { groundPrev = groundSrc; groundSrc = src; drawGroundCaption(); }
+  for (const m of ground.children) m.visible = false;
+  if (!src) return;
+  frustum.setFromProjectionMatrix(projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  const f = canvas.clientHeight / (2 * Math.tan(camera.fov * DEG / 2)), maxL = src.startsWith('Orto') ? 9 : 8;
+  const visit = (L, i, j) => {
+    if (!inView(L, i, j)) return;
+    const t = groundTile(src, L, i, j, true), s = GROUND_ROOT / 2 ** L;
+    if (L < maxL && s * f / Math.max(1, gbox.distanceToPoint(camera.position)) > GROUND_PX) {
+      const kids = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => [L + 1, 2 * i + a, 2 * j + b]).filter(k => inView(...k));
+      // Split once every child in view has arrived; until then this tile stands in for them.
+      if (kids.map(k => groundTile(src, ...k, true)).every(k => k.ready)) return kids.forEach(k => visit(...k));
+    }
+    // A new year's tile still on its way: the year before's stays where it was.
+    const shown = t.ready ? t : groundPrev && groundTile(groundPrev, L, i, j, false);
+    if (shown?.mesh) shown.mesh.visible = true;
+  };
+  visit(0, 0, 0);
+  if (groundTiles.size > 240) {  // some 1.4 MB each on the GPU
+    for (const [k, t] of [...groundTiles].filter(([, t]) => t.ready).sort((a, b) => a[1].used - b[1].used).slice(0, 80)) {
+      if (t.mesh) { ground.remove(t.mesh); t.mesh.material.uniforms.map.value.dispose(); t.mesh.material.dispose(); }
+      groundTiles.delete(k);
+    }
+  }
+}
+const groundBtn = document.getElementById('ground');
+function setGround(on) { groundOn = on; groundBtn.setAttribute('aria-pressed', on); drawGroundCaption(); }
+groundBtn.onclick = () => setGround(!groundOn);
+function drawGroundCaption() {
+  const g = groundOn && groundAt(uniforms.uYear.value);
+  document.getElementById('ground-src').textContent = g ? `${t(g[1].startsWith('Orto') ? 'Aerial photo' : 'Map')} ${g[0]}` : '';
 }
 
 // ---------- Building lookup ----------
@@ -563,6 +693,12 @@ function building(gid) {
     fac: config.facades[attrs.getUint8(o + 23)],
     x: attrs.getFloat32(o + 24, true),
     z: attrs.getFloat32(o + 28, true),
+    gone: attrs.getInt16(o + 32, true),
+    eclass: attrs.getUint8(o + 34),
+    ever: attrs.getUint8(o + 35),
+    eluku: attrs.getUint16(o + 36, true),
+    solar: attrs.getInt32(o + 38, true),
+    panel: attrs.getUint16(o + 42, true),
     groups: groupsByBit.filter(g => g.bit < 32 ? (lay0 >>> g.bit) & 1 : (lay1 >>> (g.bit - 32)) & 1),
   };
 }
@@ -571,10 +707,16 @@ const periodOf = y => periods.find(p => y >= p.from && y <= p.to) || periods[0];
 
 // ---------- Building card ----------
 // Hover shows a light card that follows the pointer; a click pins it, with the article extract and links.
-let wiki = [], didYouKnow = {};
+let wiki = [], didYouKnow = {}, streetNames = {};
 fetch('data/wiki.json').then(r => r.json()).then(w => { wiki = w; });
+fetch('data/streets.json').then(r => r.json()).then(s => { streetNames = s; }); // {street: [why so named, history]}, s07_labels
 fetch('data/facts.json').then(r => r.json()).then(f => { didYouKnow = f; }); // 'Did you know', checked in s11_facts
 const REGISTER_URL = () => `https://hri.fi/data/${LANG === 'fi' ? 'fi' : 'en_GB'}/dataset/helsingin-rakennukset`;
+const MODEL_URL = () => `https://hri.fi/data/${LANG === 'fi' ? 'fi' : 'en_GB'}/dataset/helsingin-3d-kaupunkimalli`;
+const SOLAR_URL = () => `https://hri.fi/data/${LANG === 'fi' ? 'fi' : 'en_GB'}/dataset/paakaupunkiseudun-aurinkosahkopotentiaali`;
+const NAMES_URL = () => `https://hri.fi/data/${LANG === 'fi' ? 'fi' : 'en_GB'}/dataset/helsingin-nimisto`;
+const ENERGY_URL = 'https://www.energiatodistusrekisteri.fi/';
+const mwh = kwh => (kwh / 1000).toLocaleString(fmtLocale(), { maximumFractionDigits: kwh < 10000 ? 1 : 0 });
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>`;
 
@@ -691,6 +833,7 @@ function cardHtml(gid, pinned) {
   const period = periodOf(b.year);
   const facts = [
     w?.label && b.addr && tr(w, 'label') !== b.addr && [t('Address'), esc(b.addr)],
+    b.gone && [t('Demolished'), b.gone],
     b.use && [t('Use'), esc(b.use[LANG])],
     // fsrc: bit 1, floors not in the register; bit 2, height from the floors rather than the 3D city model
     [t('Height'), `${b.height.toLocaleString(fmtLocale(), { maximumFractionDigits: 1 })} m${b.fsrc & 2 ? ` (${t('floors × 3.2 m')})` : ''}`],
@@ -699,28 +842,40 @@ function cardHtml(gid, pinned) {
     b.fac && [t('Facade'), esc(b.fac[LANG])],
     w?.architects?.length && [t(w.architects.length > 1 ? 'Architects' : 'Architect'), w.architects.map(esc).join(', ')],
     w?.styles?.length && [t('Style'), (LANG === 'fi' && w.styles_fi?.length ? w.styles_fi : w.styles).map(esc).join(', ')],
+    b.eclass && [t('Energy label'), `${'GFEDCBA'[b.eclass - 1]} (${LANG === 'fi' ? `E-luku ${b.eluku}, vuoden 20${b.ever} asteikko` : `E-value ${b.eluku}, 20${b.ever} scale`})`],
+    b.solar >= 0 && [t('Solar potential'), b.solar ? (LANG === 'fi' ? `${mwh(b.solar)} MWh vuodessa, ${fmt(b.panel)} m² paneeleja`
+      : `${mwh(b.solar)} MWh a year from ${fmt(b.panel)} m² of panels`) : t('no suitable roof')],
     pinned && b.bag.length === 10 && [t('Building ID'), esc(b.bag)],
   ].filter(Boolean);
+  // Why the street of its address is so named, in Finnish: the reason first, the older history folded under it.
+  const street = b.addr.replace(/\s+\d.*$/, ''), named = pinned && streetNames[street];
+  const naming = named && `<section class="naming"><h4>${t('Street name, in Finnish')}</h4><p class="why" lang="fi"><b>${esc(street)}.</b> ${esc(named[0] || named[1])}</p>
+    ${named[0] && named[1] ? `<details><summary>${t('History of the name')}</summary><p class="why" lang="fi">${esc(named[1])}</p></details>` : ''}</section>`;
   const credit = im && (pinned
     ? `${link(im.page || im.thumb, im.artist || 'Wikimedia Commons')}${im.license ? `, ${im.licenseUrl ? link(im.licenseUrl, im.license) : esc(im.license)}` : ''}`
     : `${esc(im.artist || 'Wikimedia Commons')}${im.license ? `, ${esc(im.license)}` : ''}`);
   const sources = [
     wikiOf(w)?.url && `${link(wikiOf(w).url, t(wikiOf(w).lang === 'fi' ? 'Finnish Wikipedia' : 'Wikipedia'))} (${link('https://creativecommons.org/licenses/by-sa/4.0/', 'CC BY-SA 4.0')})`,
-    link(REGISTER_URL(), t('Helsinki building register')),
+    b.gone ? link(MODEL_URL(), t('Helsinki 3D city model')) : link(REGISTER_URL(), t('Helsinki building register')),
+    b.eclass && link(ENERGY_URL, t('Energy certificate register')),
+    b.solar >= 0 && link(SOLAR_URL(), t('HSY solar potential')),
+    naming && link(NAMES_URL(), t('Helsinki place names')),
   ].filter(Boolean);
   const inLayers = b.groups.map(g => {
     const note = g.layer.notes?.[b.bag];
     return `<li><i style="background:${groupColor(g)}"></i><div><b>${esc(tr(g.layer, 'title'))}</b> <span>${esc(tr(g, 'label'))}</span>
       ${pinned && note ? `<p>${esc(tr(note, 'story'))}${note.source ? ` ${link(note.source, t('Source'))}` : ''}</p>` : ''}</div></li>`;
   }).join('');
-  const dating = b.orig && b.orig !== b.year ? `${t(DATE_NOTE[b.flag] || '')} ${t('The register gives')} ${b.orig}.` : (DATE_NOTE[b.flag] && t(DATE_NOTE[b.flag]));
-  const title = w?.label ? tr(w, 'label') : b.addr;
+  // A demolished building's year comes from the 3D city model, not the register, and only ever before its demolition.
+  const note = b.gone && b.flag ? 'The 3D city model gives no year. Estimated from the nearest dated buildings, before the year it was demolished.' : DATE_NOTE[b.flag];
+  const dating = b.orig && b.orig !== b.year ? `${t(note || '')} ${t(b.gone ? 'The 3D city model gives' : 'The register gives')} ${b.orig}.` : (note && t(note));
+  const title = w?.label ? tr(w, 'label') : b.addr || (b.gone ? t('Demolished building') : '');
   return `
     ${pinned ? '<button class="card-close" aria-label="Close">×</button>' : ''}
     ${photosHtml(b, im, credit, pinned)}
     <header class="card-head">
       ${title ? `<h3>${esc(title)}</h3>` : ''}
-      <div class="when"><span class="y">${[1, 2, 4].includes(b.flag) ? t('c. ') : ''}${b.year}</span>
+      <div class="when"><span class="y">${[1, 2, 4].includes(b.flag) ? t('c. ') : ''}${b.year}${b.gone ? `–${b.gone}` : ''}</span>
         <span class="period"><i style="background:${period.color}"></i>${esc(t(period.label))}</span></div>
     </header>
     ${pinned && wikiOf(w)?.extract ? `<section><p class="extract">${esc(wikiOf(w).extract)}</p></section>` : ''}
@@ -729,6 +884,7 @@ function cardHtml(gid, pinned) {
     ${inLayers ? `<section><h4>${t('In layers')}</h4><ul class="chips">${inLayers}</ul></section>` : ''}
     <section><dl>${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
     ${dating ? `<section><h4>${t('Dating')}</h4><p class="why">${dating}</p></section>` : ''}
+    ${naming || ''}
     ${pinned ? `<section class="sources"><h4>${t('Read more')}</h4><p>${sources.join(', ')}</p></section>`
       : `<p class="hint">${w?.wiki || b.groups.some(g => g.layer.notes?.[b.bag]) ? t('Click for the story and sources') : t('Click to keep this card open')}</p>`}`;
 }
@@ -780,6 +936,7 @@ function pinCard(gid, x, y) {
   card.hidden = false;
   card.querySelector('.card-close').onclick = () => pinCard(-1);
   card.querySelector('img')?.addEventListener('load', () => placeCard(x, y));
+  card.querySelector('.naming details')?.addEventListener('toggle', () => placeCard(x, y));
   placeCard(x, y);
 }
 addEventListener('keydown', e => { if (e.key === 'Escape') pinCard(-1); });
@@ -901,6 +1058,7 @@ function startQuest(q, n, sc = 0, mk = []) {
   quest = q; step = n; score = sc; marks = mk;
   document.body.classList.add('questing');
   setPhoto(false);
+  setGround(false);  // an old photo would give the year away
   pinCard(-1);
   enterStep(true);
 }
@@ -1152,12 +1310,24 @@ function renderPanel() {
       <div class="ramp" style="background:linear-gradient(90deg,#dbe3e6,#7da8bf,#2b5c8c,#0d1a40)"></div>
       <div class="ramp-scale"><span>1</span><span>3</span><span>8</span><span>20</span><span>40+</span></div>
       <p class="note">${LANG === 'fi' ? `${fmt(config.stats.floorsRegister)} rakennuksen kerrosluku on rakennusrekisteristä; loput ${fmt(config.stats.floorsAssumed)} ovat lähes kaikki pieniä talousrakennuksia. ${fmt(config.stats.heightModel)} rakennuksen korkeus on kaupungin 3D-mallista: kattopintojen korkeuden 70. persentiili. Muiden korkeus on kerrosluku kertaa 3,2 m.` : `${fmt(config.stats.floorsRegister)} buildings take their floors from the building register; the other ${fmt(config.stats.floorsAssumed)} are nearly all small outbuildings. ${fmt(config.stats.heightModel)} buildings take their height from the city's 3D model: the 70th percentile of their roof surfaces. The rest are floors times 3.2 m.`}</p>`;
-  } else if (mode === MODE.energy) {
-    const e = config.energy;
-    panel.innerHTML = `<h2>${t('Energy label')}</h2><div class="energy-scale">${e.labels.map((l, i) => `
-      <div><i style="background:${ENERGY_COLORS[i + 1]}"></i><span>${l}</span><span class="n">${fmt(e.counts[i + 1])}</span></div>`).reverse().join('')}</div>
-      <p class="note">${LANG === 'fi' ? `Useimpien asuntojen energialuokka. ${fmt(e.counts[0])} rakennuksella, valkoisina kartalla, ei ole rekisteröityä luokkaa.` : `The label most homes in a building carry. ${fmt(e.counts[0])} buildings, white on the map, have no registered label.`}</p>
-      <a class="src" href="https://www.atlasleefomgeving.nl/energielabels-van-gebouwen" target="_blank" rel="noopener">${t('RVO energy labels, via Atlas Leefomgeving')}</a>`;
+  } else if (mode === MODE.energy || mode === MODE.solar) {
+    const sub = `<div class="sub" role="group" aria-label="${t('Energy')}">${[MODE.energy, MODE.solar].map(m => `
+      <button data-sub="${m}" aria-pressed="${m === mode}">${t(m === MODE.energy ? 'Energy label' : 'Solar potential')}</button>`).join('')}</div>`;
+    const row = (color, label, n) => `<div><i style="background:${color}"></i><span>${label}</span><span class="n">${fmt(n)}</span></div>`;
+    if (mode === MODE.energy) {
+      const e = config.energy;
+      panel.innerHTML = `${sub}<div class="energy-scale">${e.labels.map((l, i) => row(ENERGY_COLORS[i + 1], l, e.counts[i + 1])).reverse().join('')}</div>
+        <p class="note">${LANG === 'fi' ? `Rakennuksen viimeksi laaditun voimassa olevan energiatodistuksen luokka. Todistus tarvitaan, kun rakennus tai asunto myydään tai vuokrataan; yhden ja kahden asunnon talojen todistukset eivät ole julkisia. ${fmt(e.counts[0])} rakennuksella, valkoisina kartalla, ei ole julkista todistusta. Vuosien 2013 ja 2018 asteikoissa luokkien rajat ovat eri kohdissa.` : `The label of the building's latest energy certificate in force. A certificate is needed to sell or let a building or a flat; those of houses with one or two homes are not public. ${fmt(e.counts[0])} buildings, white on the map, have no public certificate. The 2013 and 2018 scales draw the class limits in different places.`}</p>
+        <a class="src" href="${ENERGY_URL}" target="_blank" rel="noopener">${t('Energy certificate register')}, Varke</a>`;
+    } else {
+      const s = config.solar, steps = [0, ...s.steps];
+      const label = i => i === steps.length - 1 ? `${fmt(steps[i])}+` : `${fmt(steps[i])}–${fmt(steps[i + 1])}`;
+      panel.innerHTML = `${sub}<p class="note">${t('MWh a year')}</p><div class="energy-scale">${steps.map((_, i) => row(SOLAR_COLORS[i + 2], label(i), s.counts[i + 2])).reverse().join('')}
+        ${row(SOLAR_COLORS[1], t('no suitable roof'), s.counts[1])}</div>
+        <p class="note">${LANG === 'fi' ? `HSY:n arvio vuoden sähköntuotosta, jos katon kaikki sopivat osat katettaisiin aurinkopaneeleilla (hyötysuhde 15 %). Arvio on vuodelta 2015, mutta lähes kaikille vuoden 2010 jälkeen valmistuneille se antaa nollan, joten niiltä se on jätetty pois. ${fmt(s.counts[0])} rakennuksella, valkoisina kartalla, ei ole arviota; ne ovat lähes kaikki pieniä talousrakennuksia tai vuoden 2010 jälkeen valmistuneita.` : `HSY's estimate of a year's electricity if every suitable part of the roof carried solar panels (15 % efficient). It dates from 2015 but gives nearly every building completed after 2010 zero, so those are left without one. ${fmt(s.counts[0])} buildings, white on the map, have no estimate; nearly all are small outbuildings or completed after 2010.`}</p>
+        <a class="src" href="${SOLAR_URL()}" target="_blank" rel="noopener">${t('HSY solar potential')}, CC BY 4.0</a>`;
+    }
+    panel.querySelectorAll('.sub button').forEach(b => b.onclick = () => { uniforms.uMode.value = +b.dataset.sub; renderPanel(); });
   } else if (activeLayer && activeLayer === residentsLayer) {
     const notes = Object.entries(residentsLayer?.notes || {});
     const people = notes.flatMap(([bag, n]) => n.people.map(p => ({ ...p, bag, at: n.at })))
@@ -1256,6 +1426,7 @@ const hist = document.getElementById('hist');
 const hctx = hist.getContext('2d');
 const T0 = Math.floor(config.yearMin / 50) * 50, T1 = config.yearMax + 1;
 const years = Object.entries(config.histogram).map(([y, v]) => [+y, v]);
+const demolished = Object.entries(config.demolished).map(([y, v]) => [+y, v]);  // they leave the count in these years
 const yMax = Math.max(...years.map(([, v]) => v.reduce((a, b) => a + b, 0)));
 const xOf = y => (y - T0) / (T1 - T0) * hist.clientWidth;
 const yearOf = x => Math.round(T0 + x / hist.clientWidth * (T1 - T0));
@@ -1270,7 +1441,9 @@ function visibleCount() {
   const shown = layerGroupsShown();
   if (shown.length) return shown.reduce((n, g) => n + Object.entries(g.years).reduce((m, [y, c]) => m + (+y <= Y ? c : 0), 0), 0);
   let n = 0;
-  for (const [y, v] of years) if (y <= Y) v.forEach((c, i) => { if (uniforms.uMode.value !== MODE.period || maskTarget[i]) n += c; });
+  const count = (hist, sign) => { for (const [y, v] of hist) if (y <= Y) v.forEach((c, i) => { if (uniforms.uMode.value !== MODE.period || maskTarget[i]) n += sign * c; }); };
+  count(years, 1);
+  count(demolished, -1);
   return n;
 }
 
@@ -1392,6 +1565,9 @@ function applyStaticText() {
   document.querySelectorAll('.modes button[data-mode]').forEach(b => { b.textContent = t(b.dataset.label); });
   document.querySelector('.quests-open span').textContent = t('Quests');
   document.querySelector('.photo-mode').textContent = t('Aerial');
+  groundBtn.textContent = t('Old maps');
+  document.querySelector('.photo-years').setAttribute('aria-label', t('Year of the aerial photos'));
+  drawGroundCaption();
   document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t('buildings');
   document.querySelector('.howto').textContent = t('Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.');
   const ld = document.getElementById('loading'); if (ld.firstChild) ld.firstChild.textContent = t('Building the city') + ' ';
@@ -1438,14 +1614,16 @@ renderer.setAnimationLoop(now => {
     if (t >= 1) stopPlay();
     drawHist();
   }
-  // ponytail: a ray into the aerial mesh costs ~10 ms close up (200k triangles), so it hovers at 5 Hz; a BVH
+  // ponytail: a ray into the aerial mesh costs ~15 ms close up (450k triangles), so it hovers at 5 Hz; a BVH
   // (three-mesh-bvh) would let it keep pace with the blocks' GPU pick
   if (pointer && !dragging && frame % (photoOn ? 12 : 3) === 0) {
     const gid = photoOn ? pickPhoto(pointer[0], pointer[1]) : pick(pointer[0], pointer[1]);
     uniforms.uHover.value = gid;
     showCard(gid, pointer[0], pointer[1]);
   }
-  if (photoOn && photo) { camera.updateMatrixWorld(); photo.update(); }
+  camera.updateMatrixWorld();
+  updateGround();
+  if (photoOn && photo) photo.update();
   renderer.render(scene, camera);
 });
 

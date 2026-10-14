@@ -26,7 +26,9 @@ def layer(**meta):
 
 @cache
 def buildings() -> gpd.GeoDataFrame:
-    return gpd.read_parquet("data/buildings.parquet", columns=["key", "i_pyraknro", "year", "geometry"])
+    """The layers tell of the city standing today: demolished buildings are in none."""
+    b = gpd.read_parquet("data/buildings.parquet", columns=["key", "i_pyraknro", "year", "gone", "geometry"])
+    return b[b.gone == 0].reset_index(drop=True)
 
 
 def within(polygons: gpd.GeoDataFrame) -> pd.DataFrame:

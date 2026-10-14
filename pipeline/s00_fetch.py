@@ -1,5 +1,6 @@
-"""Download the open data into data/raw/: Helsinki's WFS layers, the heights of its 3D city model, Museovirasto's
-RKY areas, Wikidata's buildings and the Helsinki City Museum's photos in Finna.
+"""Download the open data into data/raw/: Helsinki's WFS layers, the heights of its 3D city model and the buildings
+it records as demolished, Museovirasto's RKY areas, HSY's solar potential, the public energy certificates, Wikidata's
+buildings and the Helsinki City Museum's photos in Finna.
 
 Each WFS layer comes whole in one GetFeature request (no paging); the check below fails if a server ever caps it.
 Licences: see README.
@@ -15,6 +16,7 @@ import requests
 
 HEL = "https://kartta.hel.fi/ws/geoserver/avoindata/wfs"
 MV = "https://geoserver.museovirasto.fi/geoserver/rajapinta_suojellut/wfs"
+HSY = "https://kartta.hsy.fi/geoserver/wfs"
 NATIONAL = {"srsName": "EPSG:3879", "bbox": "25488000,6644000,25515000,6688000,EPSG:3879"}  # Helsinki's box
 LAYERS = [  # (server, layer, extra parameters); saved as data/raw/<layer name>.geojson
     (HEL, "avoindata:Rakennukset_alue_rekisteritiedot", {}),        # buildings, EPSG:3879
@@ -23,8 +25,13 @@ LAYERS = [  # (server, layer, extra parameters); saved as data/raw/<layer name>.
     (HEL, "avoindata:Asemakaavoissa_suojellut_rakennukset_alue", {}),  # protected in local plans
     (HEL, "avoindata:YLRE_Katualue_alue", {}),                       # street areas, for street names
     (HEL, "avoindata:Osoiteluettelo_piste_rekisteritiedot", {}),     # address points, to place archive photos
+    (HEL, "avoindata:Nimisto_piste_rekisteritiedot", {}),            # place names, with why each was given
     (MV, "rajapinta_suojellut:rky_alue", NATIONAL),                  # RKY areas
+    (HSY, "ilmasto_ja_energia:rakennukset_aurinkosahkopotentiaali", NATIONAL),  # solar potential by building, 2015
 ]
+# Every energy certificate in force, as Varke's register publishes them (about 110 MB); those of houses with one or
+# two homes are not public.
+ENERGY_CERTS = "https://www.energiatodistusrekisteri.fi/api/public/energiatodistukset/csv/energiatodistukset.csv"
 
 # Every Wikidata item with a permanent building identifier (VTJ-PRT, P3824), in all of Finland:
 # s06_wiki keeps those that match a building on the map.
@@ -79,9 +86,10 @@ CITY_MODEL = "https://kartta.hel.fi/3d/datasource-data/16fc3fd5-df6d-4f48-bfd5-9
 GLTF_TYPES = {5126: np.float32, 5125: np.uint32, 5123: np.uint16, 5121: np.uint8}
 
 
-def roof_heights(b: bytes):
-    """b3dm → [(VTJ-PRT, measured height, roof p70, storeys)]. glTF is y-up: y is the height in metres."""
+def read_b3dm(b: bytes):
+    """b3dm → (feature table, batch table, glTF, accessor(i) → numpy array)."""
     _, _, _, ftj, ftb, btj, btb = struct.unpack("<4sIIIIII", b[:28])
+    features = json.loads(b[28:28 + ftj])
     o = 28 + ftj + ftb
     table = json.loads(b[o:o + btj])
     glb = b[o + btj + btb:]
@@ -97,6 +105,12 @@ def roof_heights(b: bytes):
                                               (a["count"], n * dt.itemsize), (stride, 1))
         return np.ascontiguousarray(raw).view(dt).reshape(a["count"], n).squeeze()
 
+    return features, table, gltf, accessor
+
+
+def roof_heights(b: bytes):
+    """b3dm → [(VTJ-PRT, measured height, roof p70, storeys)]. glTF is y-up: y is the height in metres."""
+    _, table, gltf, accessor = read_b3dm(b)
     y, area, flat, bid, ground = [], [], [], [], {}
     for prim in (p for m in gltf["meshes"] for p in m["primitives"]):
         pos, ids = accessor(prim["attributes"]["POSITION"]), accessor(prim["attributes"]["_BATCHID"]).astype(int)
@@ -123,13 +137,18 @@ def roof_heights(b: bytes):
     return rows
 
 
-def fetch_heights(out: Path):
-    tiles, stack = [], [requests.get(CITY_MODEL + "tileset.json", headers=UA, timeout=120).json()["root"]]
+def tile_uris(base: str) -> list:
+    tiles, stack = [], [requests.get(base + "tileset.json", headers=UA, timeout=120).json()["root"]]
     while stack:
         node = stack.pop()
         if node.get("content"):
             tiles.append(node["content"].get("uri") or node["content"]["url"])
         stack += node.get("children", [])
+    return tiles
+
+
+def fetch_heights(out: Path):
+    tiles = tile_uris(CITY_MODEL)
     get = lambda t: roof_heights(requests.get(CITY_MODEL + t, headers=UA, timeout=300).content)
     with ThreadPoolExecutor(4) as ex:
         rows = [r for tile in ex.map(get, tiles) for r in tile]
@@ -138,6 +157,19 @@ def fetch_heights(out: Path):
         w.writerow(["vtj_prt", "measured", "roof_p70", "storeys"])
         w.writerows(rows)
     print("city model buildings with a VTJ-PRT", len(rows), "in", len(tiles), "tiles")
+
+
+# The buildings the city model records as demolished, 2008 to now (LoD1, 3D Tiles, CC BY 4.0): about 4,800 in 871
+# tiles, 10 MB, kept whole for s01_load. Each carries its year of demolition, and often its year of construction.
+DEMOLISHED = "https://kartta.hel.fi/3d/datasource-data/9f75214e-0db3-4e7f-ad35-10509cb0d4e5/"
+
+
+def fetch_demolished(out: Path):
+    out.mkdir(exist_ok=True)
+    get = lambda t: (out / t.replace("/", "_")).write_bytes(requests.get(DEMOLISHED + t, headers=UA, timeout=300).content)
+    with ThreadPoolExecutor(8) as ex:
+        n = len(list(ex.map(get, tile_uris(DEMOLISHED))))
+    print("demolished buildings' tiles", n)
 
 
 def main():
@@ -158,7 +190,9 @@ def main():
     r.raise_for_status()
     (out / "wd_buildings.csv").write_bytes(r.content)
     print("wikidata rows", r.text.count("\n") - 1)
+    (out / "energiatodistukset.csv").write_bytes(requests.get(ENERGY_CERTS, headers=UA, timeout=900).content)
     fetch_heights(out / "city_model_heights.csv")
+    fetch_demolished(out / "demolished")
     fetch_finna(out / "finna_hkm.jsonl")
 
 

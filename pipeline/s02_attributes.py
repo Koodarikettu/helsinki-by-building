@@ -10,7 +10,8 @@ Year sources, in order of trust:
   estimated  as above, on a property with no dated building; median year of the nearest dated buildings
 Floors: the register's i_kerrlkm, or one where it gives none.
 Height: from the city's 3D model (LoD2), linked by VTJ-PRT: the 70th percentile of the roof's height (s00_fetch),
-else its measured height (to the highest point), else floors × 3.2 m.
+else its measured height (to the highest point), else, for a demolished building, the model's LoD1 height, else
+floors × 3.2 m. A demolished building's year falls before the year it was demolished, estimated or not.
 """
 import hashlib
 
@@ -79,6 +80,7 @@ def main():
     print("no year or a placeholder:", int((p.date_flag == FLAG_ESTIMATED).sum()))
     p = smooth_round_years(p)
     p = estimate_missing(p)
+    p["year"] = np.where(p.gone > 0, np.minimum(p.year, p.gone - 1), p.year)
     p["period"] = p.year.map(period_index).astype(np.uint8)
 
     p["floors"] = p.i_kerrlkm.fillna(1).clip(1, 99).astype(np.uint8)
@@ -86,6 +88,7 @@ def main():
     model = pd.read_csv("data/raw/city_model_heights.csv", dtype={"vtj_prt": str})
     model["h"] = model.roof_p70.fillna(model.measured).where(lambda h: h > 0)
     modelled = p.vtj_prt.map(model.dropna(subset=["h"]).groupby("vtj_prt").h.max())  # a building cut by a tile edge
+    modelled = modelled.fillna(p.lod1_height.where(p.lod1_height > 0))
     p["height_src"] = np.where(modelled.notna(), HEIGHT_MODEL, HEIGHT_FLOORS).astype(np.uint8)
     p["height"] = modelled.fillna(p.floors * STOREY_M).clip(lower=2.0)
 
@@ -101,6 +104,7 @@ def main():
         "floors_register": int((p.floors_src == FLOORS_REGISTER).sum()),
         "floors_assumed": int((p.floors_src == FLOORS_ASSUMED).sum()),
         "height_model": int((p.height_src == HEIGHT_MODEL).sum()),
+        "demolished": int((p.gone > 0).sum()),
     })
     print(p.groupby("period").size().to_dict())
 
