@@ -102,13 +102,21 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   step whose claims are not word for word in its Wikipedia article, whose place is not found, or whose year is not
   the map's year for the building. The hard walk uses 1800s photos from the City Museum as clues; Oodi, Kiasma and the
   National Theatre are reached by their address, since Wikidata does not link them to their buildings.
+- **Aerial view.** The Aerial mode streams the city's photogrammetric mesh from its 2024 aerial photos
+  (`kartta.hel.fi/3d/mesh/Helsinki_2024/2/`, 3D Tiles) into the same scene with
+  [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS); nothing is downloaded by the pipeline. The
+  globe is turned to east, up and south at Senaatintori and by the grid's meridian convergence (−0.041°), which keeps
+  it within 7 cm of ETRS-GK25 across the city; each tile is then stood upright and lifted by the earth's curvature
+  (10 m at Vuosaari), so the sea reads 0 m in the centre and in Vuosaari alike. The mesh's heights are N2000 already.
+  A click finds the point it hits in the mesh and the building whose block stands under it.
 - **Known differences.** Checked against five landmarks: the Cathedral (registered as Hallituskatu 7) 1852, the
   Sederholm house 1757, Kiasma 1998 and Oodi 2018 are right; the Railway Station gives 1909 (completed 1919).
   Not corrected by hand.
 
 ## Licence
 
-Code: MIT (see [LICENSE](LICENSE)), © Alexander Barakov and contributors.
+Code: MIT (see [LICENSE](LICENSE)), © Alexander Barakov and contributors. Vendored in `web/vendor/`: three.js (MIT)
+and 3d-tiles-renderer 0.5.3 (Apache 2.0, `web/vendor/3d-tiles-renderer/LICENSE`).
 
 Data keeps the licence of its source:
 - Buildings: City of Helsinki, [Helsingin rakennukset](https://hri.fi/data/en_GB/dataset/helsingin-rakennukset),
@@ -132,6 +140,8 @@ Data keeps the licence of its source:
   the city information model's LoD2 buildings as 3D Tiles. CC BY 4.0. The model's WFS
   (`kartta.hel.fi/3d/citydb-wfs/wfs`) answered 503 on 14 October 2026; the 3D Tiles behind the city's own 3D viewer
   carry the same buildings and attributes.
+- Aerial view: City of Helsinki, [Helsingin 3D-kaupunkimallit](https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli),
+  the photogrammetric mesh (kolmioverkkomalli) from 2024 aerial photos, streamed from the city's server. CC BY 4.0.
 - Archive photos: Helsinki City Museum (Helsingin kaupunginmuseo) via the [Finna API](https://api.finna.fi). Public
   domain mark or CC BY 4.0, per photo. The museum asks that the photographer and Helsingin kaupunginmuseo are named;
   the card does, links the Finna record and loads the image from Finna. The app stores only record ids, years,

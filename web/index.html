@@ -27,6 +27,7 @@
   <button data-mode="3" aria-pressed="false">Context layers</button>
   <button data-mode="1" aria-pressed="false">Floors</button>
   <button data-mode="2" aria-pressed="false" hidden>Energy</button>
+  <button class="photo-mode" aria-pressed="false">Aerial</button>
   <button class="quests-open" aria-haspopup="dialog"><svg viewBox="0 0 24 8" aria-hidden="true"><path d="M1 1l6 6M7 1L1 7M9 1l6 6M15 1L9 7M17 1l6 6M23 1l-6 6"/></svg><span>Quests</span></button>
 </nav>
 
@@ -54,6 +55,7 @@
       <li>Protected buildings: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa" target="_blank" rel="noopener">buildings and areas protected in local plans</a>. CC BY 4.0.</li>
       <li>Street names: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-yleisten-alueiden-rekisteri" target="_blank" rel="noopener">register of public areas</a>, maintained by the Urban Environment Division. CC BY 4.0.</li>
       <li>Heights: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D city model</a>. CC BY 4.0.</li>
+      <li>Aerial view: City of Helsinki, the <a href="https://hri.fi/data/en_GB/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D city model</a>'s photogrammetric mesh from 2024 aerial photos, streamed from the city's server. CC BY 4.0.</li>
       <li>Data and maps © City of Helsinki, City Survey Services. Use classes: Statistics Finland, Building classification 1994.</li>
       <li>Nationally significant built environments: Finnish Heritage Agency, <a href="https://www.rky.fi" target="_blank" rel="noopener">RKY</a>. CC BY 4.0.</li>
       <li>Names, architects, styles: Wikidata, CC0. Article extracts: Wikipedia, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>, shortened and linked to the article. Photos: Wikimedia Commons; each photo credits its author and licence.</li>
@@ -85,6 +87,7 @@
       <li>Suojellut rakennukset: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa" target="_blank" rel="noopener">asemakaavoilla suojellut rakennukset ja alueet</a>. CC BY 4.0.</li>
       <li>Kadunnimet: <a href="https://hri.fi/data/fi/dataset/helsingin-kaupungin-yleisten-alueiden-rekisteri" target="_blank" rel="noopener">Helsingin kaupungin yleisten alueiden rekisteri</a>. Aineiston ylläpitäjä on Helsingin kaupungin kaupunkiympäristön toimiala. CC BY 4.0.</li>
       <li>Korkeudet: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D-kaupunkimalli</a>. CC BY 4.0.</li>
+      <li>Ilmakuvanäkymä: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D-kaupunkimallin</a> kolmioverkkomalli vuoden 2024 ilmakuvista, ladataan kaupungin palvelimelta. CC BY 4.0.</li>
       <li>Data ja kartat © Helsingin kaupunki, kaupunkimittauspalvelut. Käyttötarkoitusluokat: Tilastokeskus, Rakennusluokitus 1994.</li>
       <li>Valtakunnallisesti merkittävät rakennetut kulttuuriympäristöt: Museovirasto, <a href="https://www.rky.fi" target="_blank" rel="noopener">RKY</a>. CC BY 4.0.</li>
       <li>Nimet, arkkitehdit ja tyylit: Wikidata, CC0. Artikkeliotteet: Wikipedia, <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.fi" target="_blank" rel="noopener">CC BY-SA 4.0</a>, lyhennettyinä ja linkitettyinä artikkeliin. Kuvat: Wikimedia Commons; jokaisen kuvan tekijä ja lisenssi näkyvät kuvan yhteydessä.</li>
@@ -128,6 +131,8 @@
 </footer>
 
 <div id="loading" class="loading">Building the city <span id="progress">0</span>%</div>
+<!-- The aerial model's loaders (vendor/3d-tiles-renderer, vendor/three-addons) import three by name -->
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/three-addons/" } }</script>
 <script type="module" src="app.js"></script>
 </body>
 </html>

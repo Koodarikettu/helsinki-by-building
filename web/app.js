@@ -76,7 +76,7 @@ const FI_UI = {
   'Wikidata records this building as their place of work.': 'Wikidatan mukaan henkilö työskenteli tässä.',
   'Wikidata records this building as their birthplace.': 'Wikidatan mukaan henkilö syntyi tässä.',
   'Wikidata records this building as the place where they died.': 'Wikidatan mukaan henkilö kuoli tässä.',
-  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia',
+  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva',
   'buildings': 'rakennusta', 'Building the city': 'Kaupunkia rakennetaan',
   'Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.': 'Käännä vetämällä. Siirrä oikealla painikkeella tai Shift-vedolla. Zoomaa rullalla.',
   'Show legend': 'Näytä selite', 'Hide legend': 'Piilota selite',
@@ -397,6 +397,8 @@ function makeMaterial(tex, pick, born) {
 
 // ---------- Tiles ----------
 const meshes = [];
+const blocks = new THREE.Group();   // hidden in the aerial view, still found by its clicks
+scene.add(blocks);
 let loaded = 0;
 const queue = [...config.tiles];
 const pool = Array.from({ length: WORKERS }, () => new Worker('worker.js', { type: 'module' }));
@@ -416,7 +418,7 @@ function addTile(m) {
   mesh.userData = { draw: mesh.material, pick: makeMaterial(tex, true, born) };
   mesh.scale.setScalar(0.1);
   mesh.position.set(m.origin[0], 0, m.origin[1]);
-  scene.add(mesh);
+  blocks.add(mesh);
   meshes.push(mesh);
 }
 
@@ -460,6 +462,72 @@ function pick(x, y) {
   for (const m of meshes) m.material = m.userData.draw;
   camera.clearViewOffset();
   return pickPixel[0] + pickPixel[1] * 256 + pickPixel[2] * 65536 - 1;
+}
+
+// ---------- Aerial view ----------
+// The city's photogrammetric mesh from its 2024 aerial photos (3D Tiles, CC BY 4.0), streamed from the city's server
+// as a view of its own: the coloured blocks, land and names hide. Loaded on first use.
+const PHOTO_URL = 'https://kartta.hel.fi/3d/mesh/Helsinki_2024/2/tileset.json';  // 1/ is an untextured floor
+const DEG = THREE.MathUtils.DEG2RAD;
+let photo = null, photoLoad = null, photoOn = false;
+async function loadPhoto() {
+  const [{ TilesRenderer, WGS84_ELLIPSOID: E }, { GLTFLoader }, { DRACOLoader }] = await Promise.all([
+    import('./vendor/3d-tiles-renderer/index.three.js'),
+    import('three/addons/loaders/GLTFLoader.js'),
+    import('three/addons/loaders/DRACOLoader.js'),
+  ]);
+  const tiles = new TilesRenderer(PHOTO_URL);
+  const draco = new DRACOLoader().setDecoderPath('vendor/three-addons/libs/draco/');
+  tiles.manager.addHandler(/\.gltf$/, new GLTFLoader(tiles.manager).setDRACOLoader(draco));  // b3dm tiles, Draco-packed
+  // Globe to map: east, up and south at Senaatintori, turned by the meridian convergence so that x and z follow the
+  // ETRS-GK25 grid (central meridian 25° E). One turn holds to 7 cm across the city. The mesh's heights are N2000
+  // written as heights above the ellipsoid (the sea reads 0.2–0.4 m), so they need no geoid.
+  const lat = 60.1694 * DEG, lon = 24.9527 * DEG, g = (lon - 25 * DEG) * Math.sin(lat), c = Math.cos(g), s = Math.sin(g);
+  const toMap = new THREE.Matrix4().set(c, -s, 0, 0, 0, 0, 1, 0, -s, -c, 0, 0, 0, 0, 0, 1)
+    .multiply(E.getEastNorthUpFrame(lat, lon, 0, new THREE.Matrix4()).invert());
+  const fromMap = toMap.clone().invert();
+  toMap.decompose(tiles.group.position, tiles.group.quaternion, tiles.group.scale);
+  // The globe curves away under the flat map, 10 m by Vuosaari: each tile is stood upright about its centre and
+  // lifted to that centre's height above sea level.
+  const box = new THREE.Box3(), mid = new THREE.Vector3(), up = new THREE.Vector3(), geo = {}, turn = new THREE.Matrix4();
+  tiles.addEventListener('load-model', ({ scene }) => {
+    E.getPositionToCartographic(box.setFromObject(scene).getCenter(mid), geo);
+    E.getCartographicToNormal(geo.lat, geo.lon, up).transformDirection(toMap);
+    mid.applyMatrix4(toMap);
+    turn.makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(up, new THREE.Vector3(0, 1, 0)))
+      .premultiply(new THREE.Matrix4().makeTranslation(mid.x, geo.height, mid.z))
+      .multiply(new THREE.Matrix4().makeTranslation(-mid.x, -mid.y, -mid.z));
+    scene.matrix.premultiply(toMap).premultiply(turn).premultiply(fromMap);
+    scene.matrix.decompose(scene.position, scene.quaternion, scene.scale);
+    // The photos are sRGB and drawn as they are, like every other colour here.
+    scene.traverse(o => { if (o.material?.map) o.material.map.colorSpace = THREE.NoColorSpace; });
+  });
+  tiles.setCamera(camera);
+  tiles.setResolutionFromRenderer(camera, renderer);
+  scene.add(tiles.group);
+  return photo = tiles;
+}
+async function setPhoto(on) {
+  photoOn = on;
+  document.body.classList.toggle('photo', on);
+  document.querySelector('.photo-mode').setAttribute('aria-pressed', on);
+  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !on && +b.dataset.mode === uniforms.uMode.value));
+  blocks.visible = flat.visible = labelGroup.visible = !on;
+  if (on) { if (playing) stopPlay(); pinCard(-1); }
+  if (on || photoLoad) (await (photoLoad ??= loadPhoto())).group.visible = photoOn;
+}
+// A click in the aerial view finds the point it hits, then the block standing under that point: the building's
+// footprint decides, wherever the ground lies.
+const ray = new THREE.Raycaster();
+ray.firstHitOnly = true;
+function pickPhoto(x, y) {
+  ray.setFromCamera(new THREE.Vector2(x / canvas.clientWidth * 2 - 1, 1 - y / canvas.clientHeight * 2), camera);
+  const hit = photo && ray.intersectObject(photo.group, true)[0];
+  if (!hit) return -1;
+  ray.set(new THREE.Vector3(hit.point.x, 2000, hit.point.z), new THREE.Vector3(0, -1, 0));
+  const b = ray.intersectObjects(meshes, false)[0];
+  // vGid in the vertex shader: the attribute texture's fourth channel, two texels per building
+  return b ? b.object.userData.draw.uniforms.uAttr.value.image.data[8 * b.object.geometry.attributes.bld.getX(b.face.a) + 3] : -1;
 }
 
 // ---------- Building lookup ----------
@@ -726,7 +794,7 @@ canvas.addEventListener('pointerdown', e => {
 canvas.addEventListener('pointerup', e => {
   dragging = false;
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
-  const gid = pick(e.clientX, e.clientY);
+  const gid = photoOn ? pickPhoto(e.clientX, e.clientY) : pick(e.clientX, e.clientY);
   if (quest && !solved && qStep().kind === 'find') { questClick(gid); return; }
   if (cardsLocked()) return;
   pinCard(gid === pinnedGid ? -1 : gid, e.clientX, e.clientY);
@@ -832,6 +900,7 @@ const cardsLocked = () => quest && !solved && quizGid >= 0;
 function startQuest(q, n, sc = 0, mk = []) {
   quest = q; step = n; score = sc; marks = mk;
   document.body.classList.add('questing');
+  setPhoto(false);
   pinCard(-1);
   enterStep(true);
 }
@@ -1168,6 +1237,7 @@ function setLayer(L) {
 }
 
 document.querySelectorAll('.modes button[data-mode]').forEach(b => b.onclick = () => {
+  if (photoOn) setPhoto(false);
   uniforms.uMode.value = +b.dataset.mode;
   document.querySelectorAll('.modes button[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b));
   const bits = Array(MAX_GROUPS).fill(-1);
@@ -1178,6 +1248,8 @@ document.querySelectorAll('.modes button[data-mode]').forEach(b => b.onclick = (
   if (!phone.matches || (uniforms.uMode.value === MODE.layers && !activeLayer)) setCollapsed(false);
   renderPanel(); drawHist();
 });
+
+document.querySelector('.photo-mode').onclick = () => setPhoto(!photoOn);
 
 // ---------- Timeline ----------
 const hist = document.getElementById('hist');
@@ -1307,6 +1379,7 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
+  photo?.setResolutionFromRenderer(camera, renderer);
   drawHist();
 }
 addEventListener('resize', resize);
@@ -1318,6 +1391,7 @@ function applyStaticText() {
   document.querySelectorAll('[data-lang-block]').forEach(a => { a.hidden = a.dataset.langBlock !== LANG; });
   document.querySelectorAll('.modes button[data-mode]').forEach(b => { b.textContent = t(b.dataset.label); });
   document.querySelector('.quests-open span').textContent = t('Quests');
+  document.querySelector('.photo-mode').textContent = t('Aerial');
   document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t('buildings');
   document.querySelector('.howto').textContent = t('Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.');
   const ld = document.getElementById('loading'); if (ld.firstChild) ld.firstChild.textContent = t('Building the city') + ' ';
@@ -1364,13 +1438,16 @@ renderer.setAnimationLoop(now => {
     if (t >= 1) stopPlay();
     drawHist();
   }
-  if (pointer && !dragging && frame % 3 === 0) {
-    const gid = pick(pointer[0], pointer[1]);
+  // ponytail: a ray into the aerial mesh costs ~10 ms close up (200k triangles), so it hovers at 5 Hz; a BVH
+  // (three-mesh-bvh) would let it keep pace with the blocks' GPU pick
+  if (pointer && !dragging && frame % (photoOn ? 12 : 3) === 0) {
+    const gid = photoOn ? pickPhoto(pointer[0], pointer[1]) : pick(pointer[0], pointer[1]);
     uniforms.uHover.value = gid;
     showCard(gid, pointer[0], pointer[1]);
   }
+  if (photoOn && photo) { camera.updateMatrixWorld(); photo.update(); }
   renderer.render(scene, camera);
 });
 
 
-window.__dbg = { pick, uniforms, camera, controls, setLayer, layers, pinCard, showCard, building, labelGroup, labels, flyTo, startPlay, gidOf, questClick, startQuest, get quests() { return quests; } };
+window.__dbg = { pick, pickPhoto, setPhoto, get photo() { return photo; }, uniforms, camera, controls, setLayer, layers, pinCard, showCard, building, labelGroup, labels, flyTo, startPlay, gidOf, questClick, startQuest, get quests() { return quests; } };
