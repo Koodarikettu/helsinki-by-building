@@ -17,98 +17,98 @@ const MODE = { period: 0, floors: 1, energy: 2, layers: 3 };
 const ENERGY_COLORS = ['#efeee9', '#c1272d', '#e4572e', '#f08a24', '#f6c445', '#c9d64a', '#8cc152', '#4caf50',
   '#2e9a49', '#1d8040', '#126b35', '#0b5a2c', '#064a24'];
 
-const [config, layers, attrBuf] = await Promise.all([
-  fetch('data/amsterdam.json').then(r => r.json()),
+const [config, layers, attrBuf, info] = await Promise.all([
+  fetch('data/helsinki.json').then(r => r.json()),
   fetch('data/layers.json').then(r => r.json()),
   fetch('data/attrs.bin').then(r => r.arrayBuffer()),
+  fetch('data/info.json').then(r => r.json()),   // per building: id (VTJ-PRT or the city's feature id), address
 ]);
 const attrs = new DataView(attrBuf);
 
 // ---------- Language ----------
-// English and Dutch. Data carries `<field>_nl` next to each English text; the interface strings are below.
-const NL_UI = {
-  'Quests': 'Speurtochten',
-  'Easy': 'Makkelijk',
-  'Medium': 'Gemiddeld',
-  'Hard': 'Moeilijk',
-  'Start': 'Begin',
-  'Continue': 'Verder',
-  'Play again': 'Opnieuw',
-  
-  'Find buildings from riddles and old photos, guess their age with the colours switched off. Every answer is worth three crosses; hints and wrong answers cost one.': 'Vind gebouwen aan de hand van raadsels en oude foto’s, raad hun leeftijd met de kleuren uit. Elk antwoord is drie kruisjes waard; hints en foute antwoorden kosten er een.',
-  'Your crosses': 'Je kruisjes',
-  'Look inside the red circle.': 'Kijk binnen de rode cirkel.',
-  'Find it on the map and click it.': 'Zoek het op de kaart en klik erop.',
-  'Hint': 'Hint',
-  'Colour by floors': 'Kleur naar verdiepingen',
-  'Colour by period': 'Kleur naar periode',
-  'Show me': 'Laat zien',
-  'Your guess': 'Jouw gok',
-  'Guess': 'Raad',
-  'A photo of the building to find': 'Een foto van het gebouw dat je zoekt',
-  'Built': 'Gebouwd',
-  'Exactly right.': 'Precies goed.',
-  'year off': 'jaar ernaast',
-  'years off': 'jaar ernaast',
-  'Shown, not found: no crosses.': 'Getoond, niet gevonden: geen kruisjes.',
-  'Full marks.': 'Alle kruisjes.',
-  'See the result': 'Bekijk het resultaat',
-  'Next': 'Volgende',
-  'Open its card': 'Open de kaart van het gebouw',
-  'Not that one.': 'Die niet.',
-  'A true Amsterdammer.': 'Een echte Amsterdammer.',
-  'You know your way around.': 'Je weet de weg.',
-  'A good walk.': 'Een mooie wandeling.',
-  'Time for a walk through town.': 'Tijd voor een wandeling door de stad.',
-  'Copy result': 'Kopieer resultaat',
-  'Copied': 'Gekopieerd',
-  'More quests': 'Meer speurtochten',
-  'Not this one, but right next to it.': 'Deze niet, maar het staat ernaast.',
-  'Not this one. Very warm.': 'Deze niet. Heel warm.',
-  'Not this one. A few streets away.': 'Deze niet. Een paar straten verderop.',
-  'Not this one. Far off.': 'Deze niet. Ver weg.',
-  'Warmer than before.': 'Warmer dan net.',
-  'Colder than before.': 'Kouder dan net.',
-  'Every building standing today, by age and historical context.': 'Elk gebouw dat er nu staat, naar leeftijd en historische context.',
-  'About': 'Over', 'Did you know': 'Wist je dat', 'Today': 'Nu', 'Earlier': 'Eerder', 'Later': 'Later', 'This photo did not load.': 'Deze foto laadde niet.', 'Open it in the archive': 'Open hem in het archief', 'Add a layer on GitHub': 'Voeg een laag toe op GitHub',
-  'Wikidata records this building as their residence.': 'Volgens Wikidata woonde deze persoon hier.',
-  'Wikidata records this building as their place of work.': 'Volgens Wikidata werkte deze persoon hier.',
-  'Wikidata records this building as their birthplace.': 'Volgens Wikidata werd deze persoon hier geboren.',
-  'Wikidata records this building as the place where they died.': 'Volgens Wikidata overleed deze persoon hier.',
-  'Period': 'Periode', 'Context layers': 'Contextlagen', 'Floors': 'Verdiepingen', 'Energy': 'Energie',
-  'buildings': 'gebouwen', 'Building the city': 'De stad wordt gebouwd',
-  'Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.': 'Sleep om te draaien. Rechts slepen of Shift-slepen om te verschuiven. Scroll om te zoomen.',
-  'Show legend': 'Legenda tonen', 'Hide legend': 'Legenda verbergen',
-  'Built in': 'Gebouwd in', 'Click a period to see it alone. Paler buildings have an approximate year.': 'Klik op een periode om alleen die te zien. Lichtere gebouwen hebben een geschat bouwjaar.',
-  'Storeys': 'Verdiepingen', 'Energy label': 'Energielabel',
-  'RVO energy labels, via Atlas Leefomgeving': 'Energielabels van RVO, via Atlas Leefomgeving',
-  'All context layers': 'Alle contextlagen', 'Find a person': 'Zoek een persoon', 'Buildings and their stories': 'Gebouwen en hun verhalen',
-  'Height': 'Hoogte', 'from the 3D BAG model': 'uit het 3D BAG-model', 'height ÷ 3.2 m': 'hoogte ÷ 3,2 m',
-  'Architect': 'Architect', 'Architects': 'Architecten', 'Style': 'Stijl', 'National monument': 'Rijksmonument',
-  'In layers': 'In lagen', 'Dating': 'Datering', 'Read more': 'Meer lezen', 'From the street': 'Vanaf de straat',
-  'Lived or worked here': 'Woonde of werkte hier', 'Source': 'Bron', 'Photo': 'Foto', 'Street view': 'Straatbeeld',
-  'Wikipedia': 'Wikipedia', 'Dutch Wikipedia': 'Nederlandstalige Wikipedia', 'Monument register': 'Monumentenregister',
-  'BAG register': 'BAG-register', 'BAG gives': 'De BAG geeft',
-  'Click for the story and sources': 'Klik voor het verhaal en de bronnen', 'Click to keep this card open': 'Klik om deze kaart open te houden',
-  'Play the city\'s growth': 'Speel de groei van de stad af', 'Pause': 'Pauze', 'Close': 'Sluiten',
-  'The register gives a round year here, more often than neighbouring years predict. Read it as “around then”.': 'Het register geeft hier een rond jaartal, vaker dan de omliggende jaren doen verwachten. Lees het als ‘rond die tijd’.',
-  'The register has no real year (placeholder 1005, or one of the surplus 1905s of the old centre). Estimated from the nearest dated buildings.': 'Het register heeft geen echt jaartal (de plaatshouder 1005, of een van de overtollige 1905’s in het oude centrum). Geschat uit de dichtstbijzijnde gedateerde gebouwen.',
-  'Year from the register of national monuments, which dates the building earlier than BAG does.': 'Jaartal uit het rijksmonumentenregister, dat het gebouw eerder dateert dan de BAG.',
-  'Dated by the register of national monuments to a century or part of one; the map spreads it across that span.': 'Door het rijksmonumentenregister gedateerd op een eeuw of een deel daarvan; de kaart spreidt het over die periode.',
-  'Year from Wikidata, which dates the building earlier than BAG does; the register of national monuments gives no date.': 'Jaartal uit Wikidata, dat het gebouw eerder dateert dan de BAG; het rijksmonumentenregister geeft geen datering.',
-  'Before 1600': 'Vóór 1600', '1600–1665 Canal ring': '1600–1665 Grachtengordel', '1870–1913 Nineteenth-century belt': '1870–1913 Negentiende-eeuwse gordel',
-  '1914–1940 Amsterdam School': '1914–1940 Amsterdamse School', '1941–1964 Garden cities': '1941–1964 Tuinsteden', '1965–1984 Bijlmer era': '1965–1984 Bijlmertijd',
-  '1985–1999 Eastern docks': '1985–1999 Oostelijk Havengebied', '2000– IJburg, Zuidas, Noord': '2000– IJburg, Zuidas, Noord',
+// Finnish and English. Data carries `<field>_fi` next to each English text; the interface strings are below.
+const FI_UI = {
+  'Helsinki, building by building': 'Helsinki, rakennus rakennukselta',
+  'Quests': 'Visailut',
+  'Easy': 'Helppo',
+  'Medium': 'Keskitaso',
+  'Hard': 'Vaikea',
+  'Start': 'Aloita',
+  'Continue': 'Jatka',
+  'Play again': 'Pelaa uudelleen',
+  'Find buildings from riddles and old photos, guess their age with the colours switched off. Every answer is worth three crosses; hints and wrong answers cost one.': 'Etsi rakennuksia arvoitusten ja vanhojen kuvien avulla ja arvaa niiden ikä värit piilotettuina. Jokaisesta vastauksesta saa kolme ristiä; vihjeet ja väärät vastaukset maksavat yhden.',
+  'Your crosses': 'Ristisi',
+  'Look inside the red circle.': 'Katso punaisen ympyrän sisältä.',
+  'Find it on the map and click it.': 'Etsi se kartalta ja napsauta sitä.',
+  'Hint': 'Vihje',
+  'Colour by floors': 'Väritä kerrosluvun mukaan',
+  'Colour by period': 'Väritä aikakauden mukaan',
+  'Show me': 'Näytä',
+  'Your guess': 'Arvauksesi',
+  'Guess': 'Arvaa',
+  'A photo of the building to find': 'Kuva etsittävästä rakennuksesta',
+  'Built': 'Valmistui',
+  'Exactly right.': 'Täsmälleen oikein.',
+  'year off': 'vuosi pielessä',
+  'years off': 'vuotta pielessä',
+  'Shown, not found: no crosses.': 'Näytetty, ei löydetty: ei ristejä.',
+  'Full marks.': 'Täydet pisteet.',
+  'See the result': 'Katso tulos',
+  'Next': 'Seuraava',
+  'Open its card': 'Avaa rakennuksen kortti',
+  'Not that one.': 'Ei se.',
+  'A true Helsinki local.': 'Todellinen stadilainen.',
+  'You know your way around.': 'Tunnet kaupunkisi.',
+  'A good walk.': 'Hyvä kävely.',
+  'Time for a walk through town.': 'Aika lähteä kaupunkikävelylle.',
+  'Copy result': 'Kopioi tulos',
+  'Copied': 'Kopioitu',
+  'More quests': 'Lisää visailuja',
+  'Not this one, but right next to it.': 'Ei tämä, mutta aivan vieressä.',
+  'Not this one. Very warm.': 'Ei tämä. Tosi lähellä.',
+  'Not this one. A few streets away.': 'Ei tämä. Muutaman korttelin päässä.',
+  'Not this one. Far off.': 'Ei tämä. Kaukana.',
+  'Warmer than before.': 'Lähempänä kuin äsken.',
+  'Colder than before.': 'Kauempana kuin äsken.',
+  'Every building standing today, by the year it was completed.': 'Kaupungin jokainen rakennus valmistumisvuoden mukaan.',
+  'About': 'Tietoa', 'Did you know': 'Tiesitkö', 'Today': 'Nyt', 'Earlier': 'Aiemmin', 'Later': 'Myöhemmin', 'This photo did not load.': 'Kuva ei latautunut.', 'Open it in the archive': 'Avaa se arkistossa',
+  'Wikidata records this building as their residence.': 'Wikidatan mukaan henkilö asui tässä.',
+  'Wikidata records this building as their place of work.': 'Wikidatan mukaan henkilö työskenteli tässä.',
+  'Wikidata records this building as their birthplace.': 'Wikidatan mukaan henkilö syntyi tässä.',
+  'Wikidata records this building as the place where they died.': 'Wikidatan mukaan henkilö kuoli tässä.',
+  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia',
+  'buildings': 'rakennusta', 'Building the city': 'Kaupunkia rakennetaan',
+  'Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.': 'Käännä vetämällä. Siirrä oikealla painikkeella tai Shift-vedolla. Zoomaa rullalla.',
+  'Show legend': 'Näytä selite', 'Hide legend': 'Piilota selite',
+  'Built in': 'Valmistunut', 'Click a period to see it alone. Paler buildings have an approximate year.': 'Napsauta aikakautta nähdäksesi vain sen. Haaleampien rakennusten vuosi on arvio.',
+  'Storeys': 'Kerroksia', 'Use': 'Käyttötarkoitus', 'Structure': 'Kantava rakenne', 'Facade': 'Julkisivu', 'Address': 'Osoite',
+  'Building ID': 'Pysyvä rakennustunnus', 'not in the register': 'ei rekisterissä', 'Height': 'Korkeus', 'floors × 3.2 m': 'kerrosluku × 3,2 m',
+  'All context layers': 'Kaikki kontekstitasot', 'Find a person': 'Etsi henkilö', 'Buildings and their stories': 'Rakennukset ja niiden tarinat',
+  'Architect': 'Arkkitehti', 'Architects': 'Arkkitehdit', 'Style': 'Tyyli',
+  'In layers': 'Tasoissa', 'Dating': 'Ajoitus', 'Read more': 'Lue lisää', 'From the street': 'Kadulta',
+  'Lived or worked here': 'Asui tai työskenteli täällä', 'Source': 'Lähde', 'Photo': 'Kuva',
+  'Wikipedia': 'Wikipedia', 'Finnish Wikipedia': 'Suomenkielinen Wikipedia', 'Helsinki building register': 'Helsingin rakennusrekisteri',
+  'The register gives': 'Rekisteri antaa', 'c. ': 'n. ',
+  'Click for the story and sources': 'Napsauta: tarina ja lähteet', 'Click to keep this card open': 'Napsauta pitääksesi kortin auki',
+  'Play the city\'s growth': 'Toista kaupungin kasvu', 'Pause': 'Tauko', 'Close': 'Sulje',
+  'The register gives a round decade here, more often than the years around it predict. Read it as “around then”.': 'Rekisteri antaa tässä tasakymmenen useammin kuin ympäröivät vuodet antaisivat odottaa. Lue se ”noihin aikoihin”.',
+  'The register gives no year, or a placeholder. Estimated from the nearest dated buildings.': 'Rekisterissä ei ole vuotta tai siinä on paikkamerkki. Arvioitu lähimpien rakennusten vuosista.',
+  'The register gives no year, or a placeholder. Estimated from the other buildings on the same property.': 'Rekisterissä ei ole vuotta tai siinä on paikkamerkki. Arvioitu saman kiinteistön muiden rakennusten vuosista.',
+  '–1808 Swedish era': '–1808 Ruotsin vallan aika', '1809–1869 Empire Helsinki': '1809–1869 Empire-Helsinki',
+  '1870–1899 Historicism and the railway': '1870–1899 Historismi ja rautatie', '1900–1917 Art Nouveau and National Romanticism': '1900–1917 Jugend ja kansallisromantiikka',
+  '1918–1939 Classicism and functionalism': '1918–1939 Klassismi ja funkis', '1940–1959 Reconstruction and the Olympics': '1940–1959 Jälleenrakennus ja olympialaiset',
+  '1960–1979 Suburbs and prefab concrete': '1960–1979 Lähiöt ja elementit', '1980–1999 Postmodernism and infill': '1980–1999 Postmoderni ja täydennysrakentaminen',
+  '2000–2014 Ruoholahti, Arabianranta, Viikki': '2000–2014 Ruoholahti, Arabianranta, Viikki', '2015– Jätkäsaari, Kalasatama, Pasila': '2015– Jätkäsaari, Kalasatama, Pasila',
 };
 let LANG = (() => {
   const q = new URLSearchParams(location.search).get('lang');
-  if (q === 'nl' || q === 'en') return q;
-  try { const s = localStorage.getItem('lang'); if (s === 'nl' || s === 'en') return s; } catch {}
-  return navigator.language?.startsWith('nl') ? 'nl' : 'en';
+  if (q === 'fi' || q === 'en') return q;
+  try { const s = localStorage.getItem('lang'); if (s === 'fi' || s === 'en') return s; } catch {}
+  return navigator.language?.startsWith('fi') ? 'fi' : 'en';
 })();
-const t = s => (LANG === 'nl' && NL_UI[s]) || s;
-const tr = (o, k) => (LANG === 'nl' && o?.[k + '_nl']) || o?.[k];
-const fmtLocale = () => LANG === 'nl' ? 'nl-NL' : 'en';
+const t = s => (LANG === 'fi' && FI_UI[s]) || s;
+const tr = (o, k) => (LANG === 'fi' && o?.[k + '_fi']) || o?.[k];
+const fmtLocale = () => LANG === 'fi' ? 'fi-FI' : 'en';
 const periods = config.periods;
 
 // ---------- Scene ----------
@@ -465,33 +465,36 @@ function pick(x, y) {
 // ---------- Building lookup ----------
 const DATE_NOTE = [
   null,
-  'The register gives a round year here, more often than neighbouring years predict. Read it as “around then”.',
-  'The register has no real year (placeholder 1005, or one of the surplus 1905s of the old centre). Estimated from the nearest dated buildings.',
-  'Year from the register of national monuments, which dates the building earlier than BAG does.',
-  'Dated by the register of national monuments to a century or part of one; the map spreads it across that span.',
-  'Year from Wikidata, which dates the building earlier than BAG does; the register of national monuments gives no date.',
+  'The register gives a round decade here, more often than the years around it predict. Read it as “around then”.',
+  'The register gives no year, or a placeholder. Estimated from the nearest dated buildings.',
+  null,
+  'The register gives no year, or a placeholder. Estimated from the other buildings on the same property.',
 ];
 const residentsLayer = layers.find(L => L.id === 'residents');
 const contextLayers = layers;
 // The card shows residents in their own section, so they are left out of its list of layers.
 const groupsByBit = layers.filter(L => L !== residentsLayer).flatMap(L => L.groups.map(g => ({ ...g, layer: L })));
 
+// Layout: pipeline/s03_tiles.py, attrs. `bag` keeps Amsterdam's name: here it is the VTJ-PRT, or the city's feature id.
 function building(gid) {
   const o = gid * config.attrStride;
-  const lay0 = attrs.getUint32(o + 20, true), lay1 = attrs.getUint32(o + 24, true);
+  const lay0 = attrs.getUint32(o + 8, true), lay1 = attrs.getUint32(o + 12, true);
   return {
     gid,
-    bag: String(attrs.getFloat64(o, true)).padStart(16, '0'),
-    height: attrs.getUint16(o + 8, true) / 10,
-    fsrc: attrs.getUint8(o + 10),
-    flag: attrs.getUint8(o + 11),
-    year: attrs.getInt16(o + 12, true),
-    orig: attrs.getInt16(o + 14, true),
-    mon: attrs.getUint32(o + 16, true),
-    wk: attrs.getInt32(o + 28, true),
-    energy: attrs.getUint8(o + 32),
-    x: attrs.getFloat32(o + 36, true),
-    z: attrs.getFloat32(o + 40, true),
+    bag: info.id[gid],
+    addr: info.addr[gid],
+    height: attrs.getUint16(o, true) / 10,
+    fsrc: attrs.getUint8(o + 2),
+    flag: attrs.getUint8(o + 3),
+    year: attrs.getInt16(o + 4, true),
+    orig: attrs.getInt16(o + 6, true),
+    wk: attrs.getInt32(o + 16, true),
+    use: config.uses[attrs.getUint8(o + 20) - 1],
+    floors: attrs.getUint8(o + 21),
+    mat: config.materials[attrs.getUint8(o + 22)],
+    fac: config.facades[attrs.getUint8(o + 23)],
+    x: attrs.getFloat32(o + 24, true),
+    z: attrs.getFloat32(o + 28, true),
     groups: groupsByBit.filter(g => g.bit < 32 ? (lay0 >>> g.bit) & 1 : (lay1 >>> (g.bit - 32)) & 1),
   };
 }
@@ -503,29 +506,12 @@ const periodOf = y => periods.find(p => y >= p.from && y <= p.to) || periods[0];
 let wiki = [], didYouKnow = {};
 fetch('data/wiki.json').then(r => r.json()).then(w => { wiki = w; });
 fetch('data/facts.json').then(r => r.json()).then(f => { didYouKnow = f; }); // 'Did you know', checked in s11_facts
+const REGISTER_URL = () => `https://hri.fi/data/${LANG === 'fi' ? 'fi' : 'en_GB'}/dataset/helsingin-rakennukset`;
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const link = (href, text) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(text)}</a>`;
 
-// Local metres → RD New → WGS84 (Schreutelkamp and Strang van Hees approximation, ~1 m).
-function toLatLon(x, z) {
-  const dX = (x + config.origin[0] - 155000) * 1e-5, dY = (config.origin[1] - z - 463000) * 1e-5;
-  const lat = 52.15517440 + (3235.65389 * dY - 32.58297 * dX ** 2 - 0.2475 * dY ** 2 - 0.84978 * dX ** 2 * dY
-    - 0.0655 * dY ** 3 - 0.01709 * dX ** 2 * dY ** 2 - 0.00738 * dX + 0.0053 * dX ** 4 - 0.00039 * dX ** 2 * dY ** 3
-    + 0.00033 * dX ** 4 * dY - 0.00012 * dX * dY) / 3600;
-  const lon = 5.38720621 + (5260.52916 * dX + 105.94684 * dX * dY + 2.45656 * dX * dY ** 2 - 0.81885 * dX ** 3
-    + 0.05594 * dX * dY ** 3 - 0.05607 * dX ** 3 * dY + 0.01199 * dY - 0.00256 * dX ** 3 * dY ** 2
-    + 0.00128 * dX * dY ** 4 + 0.00022 * dY ** 2 - 0.00022 * dX ** 2 + 0.00026 * dX ** 5) / 3600;
-  return [lat, lon];
-}
-// The city's street panoramas (CC BY 4.0), turned towards the building from the nearest point on the street.
-function streetView(b) {
-  const [lat, lon] = toLatLon(b.x, b.z);
-  return `https://api.data.amsterdam.nl/panorama/thumbnail/?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&width=640&radius=80`;
-}
-const svCredit = () => `${t('Street view')}: <a href="https://data.amsterdam.nl" target="_blank" rel="noopener">Gemeente Amsterdam</a>, CC BY 4.0`;
-
 // The article in the reader's language when there is one.
-const wikiOf = w => (LANG === 'nl' && w?.wiki_nl?.extract ? w.wiki_nl : w?.wiki) || w?.wiki_nl;
+const wikiOf = w => (LANG === 'fi' && w?.wiki_fi?.extract ? w.wiki_fi : w?.wiki) || w?.wiki_fi;
 
 function groupColor(g) {
   return GROUP_COLORS[g.layer.groups.findIndex(x => x.bit === g.bit)] || GROUP_COLORS[0];
@@ -538,17 +524,18 @@ function residentsHtml(b, pinned) {
   return `<section><h4>${t('Lived or worked here')}</h4><ul class="residents">${people.map(p => `<li>
     <b>${pinned ? link(p.url, p.person) : esc(p.person)}</b>${p.born ? ` <span>${esc(p.born)}${p.died ? '–' + esc(p.died) : ''}</span>` : ''}
     ${p.desc ? `<div class="desc">${esc(p.desc)}</div>` : ''}
-    ${pinned ? (p.quote.startsWith('Wikidata') ? `<p class="why">${esc(t(p.quote))}</p>` : `<blockquote lang="nl">${esc(p.quote)}</blockquote>`) : ''}
-    ${p.died && b.year > +p.died + 5 ? `<p class="why">${LANG === 'nl' ? `Dit gebouw dateert uit ${b.year}, na de dood van ${esc(p.person.split(' ').slice(-1)[0])}; het staat op de plek van het huis.` : `This building dates from ${b.year}, after ${esc(p.person.split(' ').slice(-1)[0])} died; it stands where their house stood.`}</p>` : ''}</li>`).join('')}</ul>
-    ${!pinned && n.people.length > 3 ? `<p class="why">${LANG === 'nl' ? 'en' : 'and'} ${n.people.length - 3} ${LANG === 'nl' ? 'meer' : 'more'}</p>` : ''}</section>`;
+    ${pinned ? (p.quote.startsWith('Wikidata') ? `<p class="why">${esc(t(p.quote))}</p>` : `<blockquote lang="fi">${esc(p.quote)}</blockquote>`) : ''}
+    ${p.died && b.year > +p.died + 5 ? `<p class="why">${LANG === 'fi' ? `Rakennus on vuodelta ${b.year}, ajalta jolloin ${esc(p.person.split(' ').slice(-1)[0])} oli jo kuollut; se seisoo talon paikalla.` : `This building dates from ${b.year}, after ${esc(p.person.split(' ').slice(-1)[0])} died; it stands where their house stood.`}</p>` : ''}</li>`).join('')}</ul>
+    ${!pinned && n.people.length > 3 ? `<p class="why">${LANG === 'fi' ? 'ja' : 'and'} ${n.people.length - 3} ${LANG === 'fi' ? 'muuta' : 'more'}</p>` : ''}</section>`;
 }
 
 // ---------- Photos through the years ----------
-// Archive pictures from the Stadsarchief beeldbank (s12_archive), in 64 shards keyed by a CRC-32 of the BAG id.
+// Archive photos of the Helsinki City Museum in Finna (s08_archive), in 64 shards keyed by a CRC-32 of the building id.
 const CRC = Array.from({ length: 256 }, (_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xEDB88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; });
 const crc32 = s => { let c = ~0; for (const ch of s) c = CRC[(c ^ ch.charCodeAt(0)) & 255] ^ (c >>> 8); return (~c) >>> 0; };
 const archiveShards = {};
 function archiveOf(bag, then) {
+  if (!config.archive) return [];
   const n = String(crc32(bag) % 64).padStart(2, '0');
   if (archiveShards[n] === undefined) {
     archiveShards[n] = null;
@@ -556,25 +543,26 @@ function archiveOf(bag, then) {
   }
   return archiveShards[n]?.[bag] || [];
 }
-// The archive's thumbnails load straight from its image host. A proxy through the site's Worker does not work:
-// the host answers data-centre requests with a bot challenge.
-const SAA_IMG = 'https://images.memorix.nl/ams/thumb/';
-const KIND_EN = { bouwtekening: 'building drawing', tekening: 'drawing', prent: 'print', prentbriefkaart: 'picture postcard' };
+// Images and records straight from Finna; medium is 600 px wide.
+const FINNA_IMG = id => `https://api.finna.fi/Cover/Show?source=Solr&id=${encodeURIComponent(id)}&index=0&size=medium`;
+const FINNA_PAGE = id => `https://www.finna.fi/Record/${encodeURIComponent(id)}`;
+const LICENCE = { 'PDM': 'https://creativecommons.org/publicdomain/mark/1.0/', 'CC0': 'https://creativecommons.org/publicdomain/zero/1.0/',
+  'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/' };
 let slides = [], slide = 0;
-// Oldest archive picture first, today's photo (Wikimedia, or the street panorama) last; the card opens on today.
+// Oldest archive photo first, today's photo (Wikimedia Commons) last; the card opens on the newest.
 function photosHtml(b, im, credit, pinned) {
   const archive = archiveOf(b.bag, () => refreshCard(b.gid));
   slides = [...archive.map(a => ({
-    src: `${SAA_IMG}640x480/${a.t}.jpg`, label: String(a.y), page: `https://archief.amsterdam/beeldbank/detail/${a.r}`,
-    credit: `${a.k ? esc(LANG === 'nl' ? a.k : KIND_EN[a.k] || a.k) + ', ' : ''}${a.y}${a.m ? ', ' + esc(a.m) : ''}, ${pinned
-      ? link(`https://archief.amsterdam/beeldbank/detail/${a.r}`, 'Stadsarchief Amsterdam') : 'Stadsarchief Amsterdam'}`,
-  })), im ? { src: im.thumb, label: t('Today'), credit: `${t('Photo')}: ${credit}` }
-    : { sv: streetView(b), label: t('Today'), credit: pinned ? svCredit() : `${t('Street view')}: Gemeente Amsterdam, CC BY 4.0` }];
+    src: FINNA_IMG(a.r), label: String(a.y), page: FINNA_PAGE(a.r),
+    credit: `${a.y}${a.m ? ', ' + esc(a.m) : ''}, ${pinned
+      ? `${link(FINNA_PAGE(a.r), 'Helsingin kaupunginmuseo')}, ${link(LICENCE[a.l], a.l)}` : `Helsingin kaupunginmuseo, ${esc(a.l)}`}`,
+  })), ...(im ? [{ src: im.thumb, label: t('Today'), credit: `${t('Photo')}: ${credit}` }] : [])];
+  if (!slides.length) return '';
   slide = slides.length - 1;
   const s = slides[slide];
   const span = archive.length && `${archive[0].y}${archive.length > 1 ? '–' + archive.at(-1).y : ''}`;
-  const more = !archive.length || pinned ? '' : `<p class="more-photos">${LANG === 'nl'
-    ? `+ ${archive.length} archieffoto${archive.length > 1 ? "'s" : ''}, ${span}. Klik om te bladeren`
+  const more = !archive.length || pinned ? '' : `<p class="more-photos">${LANG === 'fi'
+    ? `+ ${archive.length} arkistokuva${archive.length > 1 ? 'a' : ''}, ${span}. Selaa napsauttamalla`
     : `+ ${archive.length} archive photo${archive.length > 1 ? 's' : ''}, ${span}. Click to browse`}</p>`;
   return `<figure class="photo${s.sv ? ' sv' : ''}"><div class="frame">${s.sv ? `<img data-sv="${esc(s.sv)}" alt="">` : `<img src="${esc(s.src)}" alt="">`}
     ${pinned && slides.length > 1 ? `<button class="prev" aria-label="${t('Earlier')}">‹</button><button class="next" aria-label="${t('Later')}">›</button>` : ''}
@@ -634,37 +622,41 @@ function cardHtml(gid, pinned) {
   const im = w?.image?.thumb ? w.image : null;
   const period = periodOf(b.year);
   const facts = [
-    [t('Height'), `${b.height.toFixed(1)} m`],
-    [t('Storeys'), b.fsrc === 0 ? t('from the 3D BAG model') : t('height ÷ 3.2 m')],
+    w?.label && b.addr && tr(w, 'label') !== b.addr && [t('Address'), esc(b.addr)],
+    b.use && [t('Use'), esc(b.use[LANG])],
+    // fsrc: bit 1, floors not in the register; bit 2, height from the floors rather than the 3D city model
+    [t('Height'), `${b.height.toLocaleString(fmtLocale(), { maximumFractionDigits: 1 })} m${b.fsrc & 2 ? ` (${t('floors × 3.2 m')})` : ''}`],
+    [t('Storeys'), b.fsrc & 1 ? t('not in the register') : b.floors],
+    b.mat && [t('Structure'), esc(b.mat[LANG])],
+    b.fac && [t('Facade'), esc(b.fac[LANG])],
     w?.architects?.length && [t(w.architects.length > 1 ? 'Architects' : 'Architect'), w.architects.map(esc).join(', ')],
-    w?.styles?.length && [t('Style'), w.styles.map(esc).join(', ')],
-    b.mon && [t('National monument'), `${LANG === 'nl' ? 'nr.' : 'no.'} ${b.mon}`],
-    b.energy && [t('Energy label'), `<span class="elabel" style="background:${ENERGY_COLORS[b.energy]}">${config.energy.labels[b.energy - 1]}</span>`],
+    w?.styles?.length && [t('Style'), (LANG === 'fi' && w.styles_fi?.length ? w.styles_fi : w.styles).map(esc).join(', ')],
+    pinned && b.bag.length === 10 && [t('Building ID'), esc(b.bag)],
   ].filter(Boolean);
   const credit = im && (pinned
     ? `${link(im.page || im.thumb, im.artist || 'Wikimedia Commons')}${im.license ? `, ${im.licenseUrl ? link(im.licenseUrl, im.license) : esc(im.license)}` : ''}`
     : `${esc(im.artist || 'Wikimedia Commons')}${im.license ? `, ${esc(im.license)}` : ''}`);
   const sources = [
-    wikiOf(w)?.url && link(wikiOf(w).url, t(wikiOf(w).lang === 'nl' ? 'Dutch Wikipedia' : 'Wikipedia')),
-    b.mon && link(`https://monumentenregister.cultureelerfgoed.nl/monumenten/${b.mon}`, t('Monument register')),
-    link(`https://bagviewer.kadaster.nl/lvbag/bag-viewer/?objectId=${b.bag}`, t('BAG register')),
+    wikiOf(w)?.url && `${link(wikiOf(w).url, t(wikiOf(w).lang === 'fi' ? 'Finnish Wikipedia' : 'Wikipedia'))} (${link('https://creativecommons.org/licenses/by-sa/4.0/', 'CC BY-SA 4.0')})`,
+    link(REGISTER_URL(), t('Helsinki building register')),
   ].filter(Boolean);
   const inLayers = b.groups.map(g => {
     const note = g.layer.notes?.[b.bag];
     return `<li><i style="background:${groupColor(g)}"></i><div><b>${esc(tr(g.layer, 'title'))}</b> <span>${esc(tr(g, 'label'))}</span>
       ${pinned && note ? `<p>${esc(tr(note, 'story'))}${note.source ? ` ${link(note.source, t('Source'))}` : ''}</p>` : ''}</div></li>`;
   }).join('');
-  const dating = b.orig !== b.year ? `${t(DATE_NOTE[b.flag] || '')} ${t('BAG gives')} ${b.orig}.` : (DATE_NOTE[b.flag] && t(DATE_NOTE[b.flag]));
+  const dating = b.orig && b.orig !== b.year ? `${t(DATE_NOTE[b.flag] || '')} ${t('The register gives')} ${b.orig}.` : (DATE_NOTE[b.flag] && t(DATE_NOTE[b.flag]));
+  const title = w?.label ? tr(w, 'label') : b.addr;
   return `
     ${pinned ? '<button class="card-close" aria-label="Close">×</button>' : ''}
     ${photosHtml(b, im, credit, pinned)}
     <header class="card-head">
-      ${w?.label ? `<h3>${esc(tr(w, 'label'))}</h3>` : ''}
-      <div class="when"><span class="y">${[1, 2, 4].includes(b.flag) ? 'c. ' : ''}${b.year}</span>
+      ${title ? `<h3>${esc(title)}</h3>` : ''}
+      <div class="when"><span class="y">${[1, 2, 4].includes(b.flag) ? t('c. ') : ''}${b.year}</span>
         <span class="period"><i style="background:${period.color}"></i>${esc(t(period.label))}</span></div>
     </header>
     ${pinned && wikiOf(w)?.extract ? `<section><p class="extract">${esc(wikiOf(w).extract)}</p></section>` : ''}
-    ${didYouKnow[b.bag] ? `<section class="fact"><h4>${t('Did you know')}</h4><p>${esc(LANG === 'nl' ? didYouKnow[b.bag].nl : didYouKnow[b.bag].en)}${pinned ? ` ${link(didYouKnow[b.bag].source, t('Source'))}` : ''}</p></section>` : ''}
+    ${didYouKnow[b.bag] ? `<section class="fact"><h4>${t('Did you know')}</h4><p>${esc(LANG === 'fi' ? didYouKnow[b.bag].fi : didYouKnow[b.bag].en)}${pinned ? ` ${link(didYouKnow[b.bag].source, t('Source'))}` : ''}</p></section>` : ''}
     ${residentsHtml(b, pinned)}
     ${inLayers ? `<section><h4>${t('In layers')}</h4><ul class="chips">${inLayers}</ul></section>` : ''}
     <section><dl>${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section>
@@ -744,12 +736,7 @@ canvas.addEventListener('pointerleave', () => { pointer = null; if (pinnedGid < 
 // ---------- Flying to a building ----------
 let bagIndex = null;
 function gidOf(bag) {
-  if (!bagIndex) {
-    bagIndex = new Map();
-    for (let g = 0; g < config.stats.buildings; g++) {
-      bagIndex.set(String(attrs.getFloat64(g * config.attrStride, true)).padStart(16, '0'), g);
-    }
-  }
+  if (!bagIndex) bagIndex = new Map(info.id.map((id, g) => [id, g]));
   return bagIndex.get(bag) ?? -1;
 }
 let flight = null;
@@ -778,9 +765,9 @@ const questEl = document.getElementById('quest');
 const questsDlg = document.getElementById('quests');
 const L10 = o => o?.[LANG] || o?.en || '';
 const LEVEL = ['', 'Easy', 'Medium', 'Hard'];
-const qStore = () => { try { return JSON.parse(localStorage.getItem('ams-quests') || '{}'); } catch { return {}; } };
+const qStore = () => { try { return JSON.parse(localStorage.getItem('hel-quests') || '{}'); } catch { return {}; } };
 function qSave(id, patch) {
-  try { const p = qStore(); p[id] = { ...(p[id] || {}), ...patch }; localStorage.setItem('ams-quests', JSON.stringify(p)); } catch {}
+  try { const p = qStore(); p[id] = { ...(p[id] || {}), ...patch }; localStorage.setItem('hel-quests', JSON.stringify(p)); } catch {}
 }
 const crosses = (n, of = 3) => `<span class="q-x" aria-label="${n} / ${of}">${Array.from({ length: of }, (_, i) =>
   `<i class="${i < n ? 'on' : ''}">×</i>`).join('')}</span>`;
@@ -825,7 +812,7 @@ ring.visible = false;
 scene.add(ring);
 
 let quest = null, step = 0, score = 0, marks = [], hintsShown = 0, tries = 0, solved = false, revealed = false, lastDist = null;
-let folded = false, guess = 1800;
+let folded = false, guess = 1850;
 const qStep = () => quest.steps[step];
 const stepGids = s => s.bags.map(gidOf).filter(g => g >= 0);
 function centre(gids) {
@@ -849,7 +836,7 @@ function startQuest(q, n, sc = 0, mk = []) {
   enterStep(true);
 }
 function enterStep(first) {
-  hintsShown = 0; tries = 0; solved = false; revealed = false; lastDist = null; folded = false; guess = 1800;
+  hintsShown = 0; tries = 0; solved = false; revealed = false; lastDist = null; folded = false; guess = 1850;
   ring.visible = false;
   const s = qStep(), gids = stepGids(s);
   if (s.kind === 'find') {
@@ -892,7 +879,8 @@ function showRing() {
 }
 
 function photoOf(s) {
-  if (s.clue?.id) return { src: `${SAA_IMG}640x480/${s.clue.thumb}.jpg`, credit: `${link(`https://archief.amsterdam/beeldbank/detail/${s.clue.id}`, 'Stadsarchief Amsterdam')}, ${s.clue.year}`, year: s.clue.year };
+  if (s.clue?.id) return { src: FINNA_IMG(s.clue.id), year: s.clue.year,
+    credit: `${s.clue.year}${s.clue.m ? ', ' + esc(s.clue.m) : ''}, ${link(FINNA_PAGE(s.clue.id), 'Helsingin kaupunginmuseo')}, ${link(LICENCE[s.clue.l], s.clue.l)}` };
   if (s.clue?.thumb) return { src: s.clue.thumb, credit: link(s.clue.page || s.clue.thumb, [s.clue.artist, s.clue.license].filter(Boolean).join(', ') || 'Wikimedia Commons') };
   if (s.photo) {
     const g = stepGids(s)[0], b = g >= 0 && building(g), w = b && b.wk >= 0 ? wiki[b.wk] : null;
@@ -934,8 +922,8 @@ function renderQuest() {
       ${ph ? `<figure class="q-photo"><img src="${esc(ph.src)}" alt=""></figure><p class="q-credit">${ph.credit}</p>` : ''}
       <p class="q-riddle">${esc(L10(s.ask))}</p>
       ${solved ? '' : `<div class="q-year"><output>${guess}</output>
-        <input type="range" min="1250" max="2025" step="1" value="${guess}" aria-label="${t('Your guess')}">
-        <div class="q-scale"><span>1250</span><span>1500</span><span>1750</span><span>2000</span></div></div>
+        <input type="range" min="1700" max="2026" step="1" value="${guess}" aria-label="${t('Your guess')}">
+        <div class="q-scale"><span>1700</span><span>1800</span><span>1900</span><span>2000</span></div></div>
         <div class="q-actions"><button class="primary q-guess">${t('Guess')}</button><span class="q-worth">${crosses(3)}</span></div>`}`;
   } else {
     const order = s.options.map((o, i) => i).sort((a, b) => rng(quest.id + step + a)() - rng(quest.id + step + b)());
@@ -1006,8 +994,8 @@ function solve(gid, points) {
 // The result, and a line to share: one group of crosses per step, a dot for each one lost.
 function finished() {
   const n = quest.steps.length, line = marks.map(m => '×'.repeat(m) + '·'.repeat(3 - m)).join(' ');
-  const text = `LAYRS: Amsterdam · ${L10(quest.title)}\n${line}\n${score} / ${n * 3}\nhttps://stop-token.com/lab/amsterdam/`;
-  const verdict = score >= n * 3 - 1 ? 'A true Amsterdammer.' : score >= n * 2 ? 'You know your way around.' : score >= n ? 'A good walk.' : 'Time for a walk through town.';
+  const text = `${t('Helsinki, building by building')} · ${L10(quest.title)}\n${line}\n${score} / ${n * 3}\n${location.origin}${location.pathname}`;
+  const verdict = score >= n * 3 - 1 ? 'A true Helsinki local.' : score >= n * 2 ? 'You know your way around.' : score >= n ? 'A good walk.' : 'Time for a walk through town.';
   questEl.className = 'quest done';
   questEl.innerHTML = `
     <button class="q-close" aria-label="${t('Close')}">×</button>
@@ -1060,7 +1048,7 @@ const totals = periods.map(() => 0);
 for (const v of Object.values(config.histogram)) v.forEach((n, i) => totals[i] += n);
 const fmt = n => n.toLocaleString(fmtLocale());
 let activeLayer = null;
-const SECTION_ORDER = ['Discover', 'Architecture', 'Trade and empire', 'Faith and community', 'Countries and communities',
+const SECTION_ORDER = ['Discover', 'Heritage', 'Architecture', 'Trade and empire', 'Faith and community', 'Countries and communities',
   'The modern city', 'War and occupation'];
 const groupOn = {};
 let maskTarget = periods.map(() => 1);
@@ -1068,6 +1056,7 @@ let maskTarget = periods.map(() => 1);
 const ICON = {
   'Discover': '<circle cx="8" cy="8" r="6.2"/><path d="M10.6 5.4 9 9 5.4 10.6 7 7z"/>',
   'Architecture': '<path d="M3 14.5V7l5-4.5L13 7v7.5z"/><path d="M6.5 14.5v-4h3v4"/>',
+  'Heritage': '<path d="M3 14.5V7l5-4.5L13 7v7.5z"/><path d="M6.5 14.5v-4h3v4"/>',
   'Trade and empire': '<path d="M2 11h12l-1.8 3H3.8z"/><path d="M8 2v9M8 3l4.5 6H8"/>',
   'Faith and community': '<path d="M8 1.5v4M6.2 3.3h3.6"/><path d="M4 14.5V8.5L8 5.5l4 3v6z"/><path d="M7 14.5v-3h2v3"/>',
   'The modern city': '<rect x="2.5" y="5" width="5" height="9.5"/><rect x="8.5" y="2" width="5" height="12.5"/><path d="M4.5 7.5h1M4.5 10h1M10.5 4.5h1M10.5 7h1M10.5 9.5h1"/>',
@@ -1093,12 +1082,12 @@ function renderPanel() {
     panel.innerHTML = `<h2>${t('Storeys')}</h2>
       <div class="ramp" style="background:linear-gradient(90deg,#dbe3e6,#7da8bf,#2b5c8c,#0d1a40)"></div>
       <div class="ramp-scale"><span>1</span><span>3</span><span>8</span><span>20</span><span>40+</span></div>
-      <p class="note">${LANG === 'nl' ? `${fmt(config.stats.floorsBag3d)} gebouwen krijgen hun verdiepingen uit het 3D BAG-model; de rest, ${fmt(config.stats.floorsHeight)}, uit hun hoogte gedeeld door 3,2 m.` : `${fmt(config.stats.floorsBag3d)} buildings take their storeys from the 3D BAG model; the rest, ${fmt(config.stats.floorsHeight)}, from their height divided by 3.2 m.`}</p>`;
+      <p class="note">${LANG === 'fi' ? `${fmt(config.stats.floorsRegister)} rakennuksen kerrosluku on rakennusrekisteristä; loput ${fmt(config.stats.floorsAssumed)} ovat lähes kaikki pieniä talousrakennuksia. ${fmt(config.stats.heightModel)} rakennuksen korkeus on kaupungin 3D-mallista: kattopintojen korkeuden 70. persentiili. Muiden korkeus on kerrosluku kertaa 3,2 m.` : `${fmt(config.stats.floorsRegister)} buildings take their floors from the building register; the other ${fmt(config.stats.floorsAssumed)} are nearly all small outbuildings. ${fmt(config.stats.heightModel)} buildings take their height from the city's 3D model: the 70th percentile of their roof surfaces. The rest are floors times 3.2 m.`}</p>`;
   } else if (mode === MODE.energy) {
     const e = config.energy;
     panel.innerHTML = `<h2>${t('Energy label')}</h2><div class="energy-scale">${e.labels.map((l, i) => `
       <div><i style="background:${ENERGY_COLORS[i + 1]}"></i><span>${l}</span><span class="n">${fmt(e.counts[i + 1])}</span></div>`).reverse().join('')}</div>
-      <p class="note">${LANG === 'nl' ? `Het label dat de meeste woningen in een gebouw hebben. ${fmt(e.counts[0])} gebouwen, wit op de kaart, hebben geen geregistreerd label.` : `The label most homes in a building carry. ${fmt(e.counts[0])} buildings, white on the map, have no registered label.`}</p>
+      <p class="note">${LANG === 'fi' ? `Useimpien asuntojen energialuokka. ${fmt(e.counts[0])} rakennuksella, valkoisina kartalla, ei ole rekisteröityä luokkaa.` : `The label most homes in a building carry. ${fmt(e.counts[0])} buildings, white on the map, have no registered label.`}</p>
       <a class="src" href="https://www.atlasleefomgeving.nl/energielabels-van-gebouwen" target="_blank" rel="noopener">${t('RVO energy labels, via Atlas Leefomgeving')}</a>`;
   } else if (activeLayer && activeLayer === residentsLayer) {
     const notes = Object.entries(residentsLayer?.notes || {});
@@ -1131,7 +1120,6 @@ function renderPanel() {
       <button class="layer" data-id="${L.id}">
         <b>${esc(tr(L, 'title'))}</b><span class="n">${fmt(L.count)}</span><span class="era">${esc(tr(L, 'era'))}</span>
       </button>`).join('')}</div>`).join('');
-    panel.insertAdjacentHTML('beforeend', `<p class="contribute"><a href="https://github.com/alexbarakov/amsterdam-by-building/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">${t('Add a layer on GitHub')}</a></p>`);
     panel.querySelectorAll('.jump button').forEach(b => b.onclick = () =>
       panel.querySelector(`#sec-${b.dataset.sec.replace(/\W+/g, '-')}`).scrollIntoView({ behavior: 'smooth', block: 'start' }));
     panel.querySelectorAll('.layer').forEach(b => b.onclick = () => setLayer(contextLayers.find(l => l.id === b.dataset.id)));
@@ -1161,7 +1149,8 @@ function layerDetail(L) {
     </button>`).join('')}</div>` : '';
   // One line per story: a building made of several BAG parts carries the same note on each.
   const seenName = new Set();
-  const named = Object.entries(L.notes || {}).filter(([, n]) => n.name && n.at && !seenName.has(n.name) && seenName.add(n.name));
+  const named = Object.entries(L.notes || {}).filter(([, n]) => n.name && n.at && !seenName.has(n.name) && seenName.add(n.name))
+    .sort(([, a], [, b]) => tr(a, 'name').localeCompare(tr(b, 'name'), fmtLocale())); // ids that are all digits would come first
   const stories = named.length ? `<h2 class="section">${t('Buildings and their stories')}</h2><ul class="stories">${named.map(([bag, n]) => `
     <li><button class="story" data-bag="${bag}"><b>${esc(tr(n, 'name'))}</b><span>${esc(tr(n, 'story'))}</span></button></li>`).join('')}</ul>` : '';
   return `<div class="layer-detail"><p>${esc(tr(L, 'text'))}</p>${groups}${stories}
@@ -1323,7 +1312,8 @@ function resize() {
 addEventListener('resize', resize);
 function applyStaticText() {
   document.documentElement.lang = LANG;
-  document.querySelector('.dek').textContent = t('Every building standing today, by age and historical context.');
+  document.title = t('Helsinki, building by building');
+  document.querySelector('.dek').textContent = t('Every building standing today, by the year it was completed.');
   document.querySelector('.about-open').textContent = t('About');
   document.querySelectorAll('[data-lang-block]').forEach(a => { a.hidden = a.dataset.langBlock !== LANG; });
   document.querySelectorAll('.modes button[data-mode]').forEach(b => { b.textContent = t(b.dataset.label); });

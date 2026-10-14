@@ -1,28 +1,24 @@
-"""Load 3D BAG tiles, clip to Amsterdam, keep one row per pand + LoD1.3 parts."""
-import glob
-import geopandas as gpd
-import pandas as pd
+"""Helsinki's buildings with register data → data/buildings.parquet, one row per building.
+
+Key: the permanent building identifier VTJ-PRT where the outline is linked to the register, else the city's feature id.
+Every building type is kept, including 'Räystäs (stereo)': those are outlines traced along the eaves in stereo aerial
+imagery (Östersundom, Santahamina), not duplicates of other buildings. See README, Data decisions.
+"""
 import pyogrio
 
-PAND_COLS = ["identificatie", "oorspronkelijkbouwjaar", "status", "b3_bouwlagen",
-             "b3_h_maaiveld", "b3_h_dak_50p", "b3_h_dak_70p", "b3_h_dak_max",
-             "b3_dak_type", "b3_opp_grond", "b3_kwaliteitsindicator", "b3_pw_datum"]
+COLS = ["id", "vtj_prt", "i_pyraknro", "tyyppi", "c_valmpvm", "i_kerrlkm", "c_kayttark", "c_rakeaine", "c_julkisivu",
+        "c_kiinteistotunnus", "katunimi_suomi", "katunimi_ruotsi", "osoitenumero"]
+
 
 def main():
-    boundary = gpd.read_file("data/raw/boundary.json").set_crs(28992, allow_override=True)
-    city = boundary.union_all()
-    panden, parts = [], []
-    for f in sorted(glob.glob("data/raw/3dbag/*.gpkg")):
-        p = pyogrio.read_dataframe(f, layer="pand", columns=PAND_COLS)
-        q = pyogrio.read_dataframe(f, layer="lod13_2d")
-        panden.append(p); parts.append(q)
-    p = pd.concat(panden).drop_duplicates("identificatie")
-    p = gpd.GeoDataFrame(p, geometry="geometry", crs=28992)
-    p = p[p.representative_point().within(city)]
-    q = gpd.GeoDataFrame(pd.concat(parts), geometry="geometry", crs=28992)
-    q = q[q.identificatie.isin(p.identificatie)].drop_duplicates(["identificatie", "b3_pand_deel_id", "b3_dd_id"])
-    p.to_parquet("data/panden.parquet"); q.to_parquet("data/parts.parquet")
-    print(len(p), "panden;", len(q), "lod13 parts")
+    # Dates as written (local midnight, "1968-12-31T00:00:00+02:00"): parsed to UTC they would slip into the year before.
+    b = pyogrio.read_dataframe("data/raw/Rakennukset_alue_rekisteritiedot.geojson", columns=COLS, datetime_as_string=True)
+    b["key"] = b.vtj_prt.fillna(b.id.astype(str))
+    assert b.key.is_unique
+    b.to_parquet("data/buildings.parquet")
+    print(len(b), "buildings;", int(b.vtj_prt.notna().sum()), "with a VTJ-PRT")
+    print(b.tyyppi.value_counts().to_string())
+
 
 if __name__ == "__main__":
     main()

@@ -1,31 +1,32 @@
-"""Dates, floors, heights per pand.
+"""Years, floors, heights per building.
 
-Date sources, in order of trust:
-  exact      BAG oorspronkelijkbouwjaar as recorded
-  faint      a pre-1800 round year in excess of what neighbouring years predict;
-             spread across its rounding step
-  estimated  BAG placeholder 1005, or an excess 1905 (a second, unofficial placeholder: the old centre
-             holds ~10x more 1905 buildings than 1904 or 1906); median year of the nearest dated neighbours
-  monument   a rijksmonument whose RCE date is earlier than BAG's (BAG often holds a rebuilding year);
-             when BAG is earlier, BAG stays: the RCE date often describes a later facade;
-             RCE year when it gives one, otherwise spread across its century or part of one
+Year sources, in order of trust:
+  exact      the register's completion date (c_valmpvm), as recorded
+  faint      a round decade before 1930 in excess of what neighbouring years predict (1900: 170 buildings on record,
+             against about 33 a year around it; 1850, 1880 and 1890 run five to ten times over too). The register
+             rounds old dates to the decade, so the excess is spread across it, paler on the map
+  property   no year, or a placeholder (1700 or earlier: the register's 1000 and 1001); median year of the
+             dated buildings on the same property (c_kiinteistotunnus)
+  estimated  as above, on a property with no dated building; median year of the nearest dated buildings
+Floors: the register's i_kerrlkm, or one where it gives none.
+Height: from the city's 3D model (LoD2), linked by VTJ-PRT: the 70th percentile of the roof's height (s00_fetch),
+else its measured height (to the highest point), else floors × 3.2 m.
 """
-import csv
 import hashlib
+
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from .monuments import load as load_monuments
 from .periods import period_index
 
-PLACEHOLDER = 1005
-FLAG_EXACT, FLAG_FAINT, FLAG_ESTIMATED, FLAG_MONUMENT, FLAG_MONUMENT_APPROX, FLAG_WIKIDATA = 0, 1, 2, 3, 4, 5
-LATER_MARGIN = 10
-SUSPECT_YEARS = (1905,)
-DAM = (121390.0, 487380.0)
-FLOORS_BAG3D, FLOORS_HEIGHT = 0, 1
+# The viewer draws flags 1, 2 and 4 paler and writes "n." before their year; 3 and 5 were Amsterdam's monument dates.
+FLAG_EXACT, FLAG_FAINT, FLAG_ESTIMATED, FLAG_PROPERTY = 0, 1, 2, 4
+PLACEHOLDER_MAX = 1700
+ROUND_BEFORE = 1930
+FLOORS_REGISTER, FLOORS_ASSUMED = 0, 1
+HEIGHT_MODEL, HEIGHT_FLOORS = 0, 1
 STOREY_M = 3.2
 
 
@@ -34,149 +35,73 @@ def unit_hash(ids: pd.Series, salt: str) -> np.ndarray:
     return np.array([int(hashlib.md5((salt + i).encode()).hexdigest()[:8], 16) / 2**32 for i in ids])
 
 
-def rounding_step(y: int) -> int:
-    for step in (100, 50, 25, 10):
-        if y % step == 0:
-            return step
-    return 1
-
-
-def apply_monuments(p: pd.DataFrame) -> pd.DataFrame:
-    """RCE wins where it contradicts BAG; where they agree, BAG's exact year stays."""
-    links = load_monuments()
-    bag = p.identificatie.str.slice(-16)
-    u = unit_hash(p.identificatie, "monument")
-    p["monument"] = bag.map(lambda b: links[b][2] if b in links else "")
-    agree = disagree = 0
-    for i in np.where(bag.isin(links))[0]:
-        lo, hi, _ = links[bag.iat[i]]
-        y = p.year.iat[i]
-        if p.date_flag.iat[i] == FLAG_EXACT and y <= hi + LATER_MARGIN:
-            agree += 1
-            continue
-        disagree += 1
-        p.iat[i, p.columns.get_loc("year")] = lo if lo == hi else int(round(lo + u[i] * (hi - lo)))
-        p.iat[i, p.columns.get_loc("date_flag")] = FLAG_MONUMENT if lo == hi else FLAG_MONUMENT_APPROX
-    print(f"monuments: {agree} kept BAG, {disagree} redated")
-    # Where RCE gives no date, a Wikidata inception more than ten years before BAG's year wins
-    # (Hollandsche Schouwburg: BAG 1988, the rebuilding; built 1892). The earliest inception counts.
-    inception = {}
-    for r in csv.DictReader(open("data/raw/wd_monuments.csv")):
-        if r["bag"] and r["inception"][:4].isdigit():
-            k = r["bag"].zfill(16)
-            inception[k] = min(inception.get(k, 9999), int(r["inception"][:4]))
-    n = 0
-    for i in np.where(~bag.isin(links) & bag.isin(inception))[0]:
-        inc = inception[bag.iat[i]]
-        if inc < p.year.iat[i] - LATER_MARGIN:
-            p.iat[i, p.columns.get_loc("year")] = inc
-            p.iat[i, p.columns.get_loc("date_flag")] = FLAG_WIKIDATA
-            n += 1
-    print(f"wikidata inception: {n} redated")
-    return p
-
-
 def smooth_round_years(p: pd.DataFrame) -> pd.DataFrame:
-    """Before 1800 the register favours round years. Keep the expected count exact, fade the rest."""
-    y = p.year.astype(int)
-    counts = y.value_counts()
-    u = unit_hash(p.identificatie, "round")
-    u2 = unit_hash(p.identificatie, "spread")
-    for year, n in counts.items():
-        step = rounding_step(year)
-        if year >= 1800 or step == 1:
+    """Keep as many buildings on a round decade as the years around it predict; spread the rest over the decade."""
+    exact = p.date_flag.values == FLAG_EXACT
+    y = p.year.values
+    counts = pd.Series(y[exact]).value_counts()
+    u, u2 = unit_hash(p.key, "round"), unit_hash(p.key, "spread")
+    for year, n in sorted(counts.items()):
+        if year >= ROUND_BEFORE or year % 10:
             continue
-        near = [counts.get(year + d, 0) for d in range(-4, 5) if d and rounding_step(year + d) == 1]
-        expected = max(1.0, float(np.mean(near))) if near else 1.0
+        expected = max(1.0, float(np.mean([counts.get(year + d, 0) for d in (-4, -3, -2, -1, 1, 2, 3, 4)])))
         if n <= expected:
             continue
-        idx = np.where((y.values == year) & (p.date_flag.values == FLAG_EXACT))[0]
-        order = idx[np.argsort(u[idx])]
-        faint = order[int(round(expected)):]
-        half = step / 2
-        p.iloc[faint, p.columns.get_loc("year")] = np.round(year - half + u2[faint] * step).astype(int)
-        p.iloc[faint, p.columns.get_loc("date_flag")] = FLAG_FAINT
-    return p
-
-
-def flag_suspect_years(p: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Keep as many buildings on a suspect year as the neighbouring years predict; the excess,
-    taken nearest the Dam first (where the placeholder concentrates), becomes estimated."""
-    y = p.year.values
-    exact = p.date_flag.values == FLAG_EXACT
-    dist = np.hypot(p.geometry.centroid.x - DAM[0], p.geometry.centroid.y - DAM[1]).values
-    for year in SUSPECT_YEARS:
-        expected = np.mean([((y == year + d) & exact).sum() for d in (-3, -2, -1, 1, 2, 3)])
         idx = np.where((y == year) & exact)[0]
-        excess = idx[np.argsort(dist[idx])][: max(0, len(idx) - int(round(expected)))]
-        p.iloc[excess, p.columns.get_loc("date_flag")] = FLAG_ESTIMATED
-        print(f"{year}: {len(idx)} on record, {expected:.0f} expected, {len(excess)} estimated")
+        faint = idx[np.argsort(u[idx])][int(round(expected)):]
+        p.iloc[faint, p.columns.get_loc("year")] = np.round(year - 5 + u2[faint] * 10).astype(int)
+        p.iloc[faint, p.columns.get_loc("date_flag")] = FLAG_FAINT
+        print(f"{year}: {n} on record, {expected:.0f} expected, {len(faint)} spread over {year - 5}–{year + 5}")
     return p
 
 
-def estimate_placeholders(p: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    pts = np.c_[p.geometry.centroid.x, p.geometry.centroid.y]
+def estimate_missing(p: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Same property first, then the twelve nearest dated buildings."""
     known = p.date_flag.values != FLAG_ESTIMATED
-    tree = cKDTree(pts[known])
-    years = p.year.values[known]
-    todo = np.where(~known)[0]
-    dist, nn = tree.query(pts[todo], k=12, distance_upper_bound=1000)
-    for row, d, n in zip(todo, dist, nn):
-        ok = np.isfinite(d)
-        p.iat[row, p.columns.get_loc("year")] = int(np.median(years[n[ok]])) if ok.any() else 1900
+    prop = p[known].groupby("c_kiinteistotunnus").year.median()
+    by_prop = p.c_kiinteistotunnus.map(prop)
+    hit = ~known & by_prop.notna().values
+    p.loc[hit, "year"] = by_prop[hit].astype(int)
+    p.loc[hit, "date_flag"] = FLAG_PROPERTY
+    rest = np.where(~known & ~hit)[0]
+    pts = np.c_[p.geometry.centroid.x, p.geometry.centroid.y]
+    _, nn = cKDTree(pts[known]).query(pts[rest], k=12)
+    p.iloc[rest, p.columns.get_loc("year")] = np.median(p.year.values[known][nn], axis=1).astype(int)
     return p
-
-
-def clean_parts(q):
-    """A few 3D BAG parts carry impossible heights (one at Petroleumhavenweg runs from -1,218 to 2,780 m and put a
-    777 m spike on the map). Such a part keeps its median height when that is sane, else sits on the ground.
-    Amsterdam's tallest structure, the Hemweg chimney, is 174 m: anything past 400 m or below -100 m is broken."""
-    broken = (q.b3_h_max > 400) | (q.b3_h_min < -100)
-    sane = q.b3_h_50p.between(-50, 400)
-    q.loc[broken, "b3_h_70p"] = np.where(sane[broken], q.b3_h_50p[broken], np.nan)
-    if broken.any():
-        print(f"{int(broken.sum())} parts with impossible heights repaired")
-    return q
 
 
 def main():
-    p = gpd.read_parquet("data/panden.parquet")
-    q = clean_parts(gpd.read_parquet("data/parts.parquet"))
+    p = gpd.read_parquet("data/buildings.parquet")
 
-    p["year"] = p.oorspronkelijkbouwjaar.astype(int)
-    p["date_flag"] = np.where(p.year == PLACEHOLDER, FLAG_ESTIMATED, FLAG_EXACT).astype(np.uint8)
-    p = apply_monuments(p)
-    p = flag_suspect_years(p)
+    p["orig"] = pd.to_numeric(p.c_valmpvm.str.slice(0, 4), errors="coerce").fillna(0).astype(int)  # 0: no year
+    p["year"] = p.orig
+    p["date_flag"] = np.where(p.orig > PLACEHOLDER_MAX, FLAG_EXACT, FLAG_ESTIMATED).astype(np.uint8)
+    print("no year or a placeholder:", int((p.date_flag == FLAG_ESTIMATED).sum()))
     p = smooth_round_years(p)
-    p = estimate_placeholders(p)
+    p = estimate_missing(p)
     p["period"] = p.year.map(period_index).astype(np.uint8)
 
-    # Height: tallest LoD1.3 part's 70th-percentile roof above ground.
-    top = q.groupby("identificatie").b3_h_70p.max()
-    p["h_roof"] = p.identificatie.map(top)
-    p["height"] = (p.h_roof - p.b3_h_maaiveld).clip(lower=2.5).fillna(2.5)
+    p["floors"] = p.i_kerrlkm.fillna(1).clip(1, 99).astype(np.uint8)
+    p["floors_src"] = np.where(p.i_kerrlkm.notna(), FLOORS_REGISTER, FLOORS_ASSUMED).astype(np.uint8)
+    model = pd.read_csv("data/raw/city_model_heights.csv", dtype={"vtj_prt": str})
+    model["h"] = model.roof_p70.fillna(model.measured).where(lambda h: h > 0)
+    modelled = p.vtj_prt.map(model.dropna(subset=["h"]).groupby("vtj_prt").h.max())  # a building cut by a tile edge
+    p["height_src"] = np.where(modelled.notna(), HEIGHT_MODEL, HEIGHT_FLOORS).astype(np.uint8)
+    p["height"] = modelled.fillna(p.floors * STOREY_M).clip(lower=2.0)
 
-    by_height = np.clip(np.round(p.height / STOREY_M), 1, 99)
-    bag3d = p.b3_bouwlagen
-    # b3_bouwlagen is capped at 5 and only modelled for simple roofs; trust it below the cap only.
-    use_bag3d = bag3d.notna() & (bag3d < 5)
-    p["floors"] = np.where(use_bag3d, bag3d, by_height).astype(np.uint8)
-    p["floors_src"] = np.where(use_bag3d, FLOORS_BAG3D, FLOORS_HEIGHT).astype(np.uint8)
-
-    p = p.sort_values("identificatie").reset_index(drop=True)
+    p = p.sort_values("key").reset_index(drop=True)
     p.to_parquet("data/buildings.parquet")
 
-    stats = {
+    print({
         "buildings": len(p),
         "exact": int((p.date_flag == FLAG_EXACT).sum()),
         "faint_round": int((p.date_flag == FLAG_FAINT).sum()),
+        "property": int((p.date_flag == FLAG_PROPERTY).sum()),
         "estimated": int((p.date_flag == FLAG_ESTIMATED).sum()),
-        "monument": int((p.date_flag == FLAG_MONUMENT).sum()),
-        "monument_approx": int((p.date_flag == FLAG_MONUMENT_APPROX).sum()),
-        "floors_bag3d": int((p.floors_src == FLOORS_BAG3D).sum()),
-        "floors_height": int((p.floors_src == FLOORS_HEIGHT).sum()),
-    }
-    print(stats)
+        "floors_register": int((p.floors_src == FLOORS_REGISTER).sum()),
+        "floors_assumed": int((p.floors_src == FLOORS_ASSUMED).sum()),
+        "height_model": int((p.height_src == HEIGHT_MODEL).sum()),
+    })
     print(p.groupby("period").size().to_dict())
 
 

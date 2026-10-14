@@ -1,62 +1,140 @@
-# Amsterdam, building by building
+# Helsinki, building by building
 
-Every building standing in Amsterdam today, 192,000 of them, by age and historical context.
-**Live:** https://stop-token.com/lab/amsterdam/
+Every building in Helsinki, 85,000 of them, coloured by the year it was completed, with the protection the city's
+plans give it, the national heritage areas it stands in and what Wikidata and Wikipedia say about it.
 
-A non-commercial project, made for curiosity and learning. Inspired by Sasha Bogachev's
-[Paris, building by building](https://paris.bogachev.fr); the architecture, a data pipeline feeding a three.js city, follows his.
+A non-commercial project, made for curiosity and learning. It is a fork of Alexander Barakov's
+[Amsterdam, building by building](https://github.com/alexbarakov/amsterdam-by-building) (MIT), which was inspired by
+Sasha Bogachev's [Paris, building by building](https://paris.bogachev.fr); the architecture, a data pipeline feeding a
+three.js city, follows theirs. The viewer in `web/` is Amsterdam's, with Helsinki's data, Finnish and English.
 
-**Want to add a layer?** See [CONTRIBUTING.md](CONTRIBUTING.md). A layer can be a hand-picked list of buildings with a story
-each, or a rule over an open dataset.
+![Helsinki's buildings coloured by the period they were completed, seen from the sea](docs/screenshots/city.jpg)
+
+| The building's card: archive photos through the years | Context layer: protected in the local plan | Quests: find the building from an old photo |
+|---|---|---|
+| ![The Government Palace card with C.A. Hårdh's photo from 1866](docs/screenshots/archive.jpg) | ![Buildings protected in local plans, by marking](docs/screenshots/protected.jpg) | ![A solved quest step: Kaivohuone in 1870 and today](docs/screenshots/quest.jpg) |
+
+Screenshots of the map, which uses CC BY 4.0 data © City of Helsinki. They show photos by C.A. Hårdh (Helsinki City
+Museum, public domain) and, in the quest, Kaivohuone today by
+[Marit Henriksson](https://commons.wikimedia.org/wiki/File:Kaivohuone_A_-Marit_Henriksson.jpg) (CC BY-SA 4.0).
 
 ## How it works
 
 ```
-open data ──► pipeline/ (Python) ──► web/data/ (binary tiles + JSON) ──► web/ (three.js, no build step)
+open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + JSON) ──► web/ (three.js, no build step)
 ```
 
 | Step | What it does |
 |---|---|
-| `s00_fetch_*` | Downloads BGT water, the city's open datasets, energy labels |
-| `s01_load` | 3D BAG tiles → buildings and their LoD 1.3 parts |
-| `s02_attributes` | Cleans construction years (placeholders, rounded years, monument register), floors, heights |
-| `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes and the city config |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points), roof heights from its 3D city model, Museovirasto's RKY areas, Wikidata's buildings and the City Museum's photos in Finna |
+| `s01_load` | Buildings → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's feature id) |
+| `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
+| `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes, addresses and the city config |
 | `s04_water` | Water and land polygons |
-| `s05_layers` | Resolves every context layer to a bit per building; adds Dutch texts |
-| `s06_wiki` | Names, photos and extracts from Wikidata, Wikipedia and Commons |
-| `s07_labels` | Street and canal names placed along their outlines |
-| `s08_curated` | Checks hand-written stories against Wikipedia and geocodes them |
-| `s09_residents` | Finds addresses of well-known residents in Dutch Wikipedia |
-| `s10_commons` | Finds more building photos on Commons by address in the file name |
-| `s11_facts` | Checks the 'Did you know' facts against Wikipedia |
-| `s13_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim |
-| `s12_archive` | Up to six archive photos per building from the Stadsarchief beeldbank, via the Amsterdam Time Machine knowledge graph |
+| `s05_layers` | Context layers: protected in the local plan, RKY areas, buildings in Wikipedia; a bit per group per building |
+| `s06_wiki` | Names, architects, styles, Wikipedia extracts and Commons photos for buildings with a Wikidata item |
+| `s07_labels` | Street names placed along their street areas |
+| `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
+| `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 
 ## Run it
 
 ```bash
 uv sync
-# raw inputs: see the docstrings of s00_* and s01_load (3D BAG tiles, PDOK boundary, RCE and Wikidata exports)
-for s in s01_load s02_attributes s05_layers s03_tiles s04_water s06_wiki s07_labels s12_archive s13_quests; do uv run python -m pipeline.$s; done
+for s in s00_fetch s01_load s02_attributes s05_layers s06_wiki s08_archive s09_quests s03_tiles s04_water s07_labels; do uv run python -m pipeline.$s; done
+uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s08   # year logic, address parsing
 python3 -m http.server 8642 --directory web
 ```
 
-Raw downloads (`data/`) and generated output (`web/data/`) are not in the repository: they are large and rebuilt by the pipeline.
+Raw downloads (`data/`) and generated output (`web/data/`) are not in the repository: they are rebuilt by the pipeline.
+The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 (EPSG:3879), x east, z south.
 
 ## Data decisions
 
-- **Years.** BAG gives every building a construction year but not always a true one: 729 carry the placeholder 1005,
-  and the old centre has ten times more buildings dated 1905 than the years around it. Both are estimated from dated
-  neighbours. Round years before 1800 are spread across their rounding step. Where the national monument register (RCE)
-  dates a building earlier than BAG, which often records a rebuilding, the register wins (Westerkerk: 1761 → 1627).
-- **Stories.** Every hand-written story names its Wikipedia article; `s08_curated` checks that the article contains the
-  story's key facts and the address, then geocodes the address to its BAG building. Entries that fail are dropped.
-- **Not included.** The last addresses of Holocaust victims: the only dataset linking the Joods Monument to buildings has
-  no open licence.
+- **Years.** The year is the year of the register's completion date (`c_valmpvm`), read as written: the dates are local
+  midnights (`1968-12-31T00:00:00+02:00`), and parsed to UTC they would slip into the year before.
+- **Rounded decades.** Before 1930 the register rounds many dates to the decade: 1900 has 170 buildings against about
+  33 a year around it, and 1850, 1880 and 1890 run five to ten times over too; from 1930 on the decades match their
+  neighbours. So 1900 is not a placeholder like Amsterdam's 1905 but the oldest dates being approximate. On each
+  round decade before 1930, as many buildings as the years around it predict keep their year; the rest (497 in all)
+  are spread across the decade, drawn paler and marked "c." / "n.".
+- **Missing years.** 34,652 buildings have no year and six carry the placeholder 1000 or 1001 (all on one property in
+  Santahamina). Nearly all are sheds, storehouses, outbuildings, garages and summer cottages: buildings with a year
+  hold 99.6% of the floor area. Their year is the median of the dated buildings on the same property
+  (`c_kiinteistotunnus`, 759 buildings), else of the twelve nearest dated buildings (33,899: most of them are not
+  linked to the register and have no property id). They are drawn paler, marked "c." / "n.", and the card says how
+  the year was found.
+- **Building types.** All 35 types are kept, 84,959 buildings. `Räystäs (stereo)` (438) looks like a roof edge
+  rather than a building, but its polygons are buildings traced along the eaves in stereo aerial imagery, mostly in
+  Östersundom and Santahamina: 436 of them overlap no other building, 128 are linked to the register (houses, a
+  school, warehouses). Dropping them would remove real buildings.
+- **Floors and heights.** Floors are the register's `i_kerrlkm`; 34,193 buildings, mostly the same small ones, have
+  none. Heights come from the city's 3D city model (LoD2, served as 3D Tiles), linked by VTJ-PRT: 51,653 buildings.
+  The model's own `measuredHeight` runs to the highest point, so as a flat block the Olympic Stadium would stand 73 m
+  tall (its tower), the Railway Station 50 m and the Cathedral 59 m. Like Amsterdam's 3D BAG, the map instead takes
+  the 70th percentile of the roof surfaces' height above the building's lowest point, weighted by area: 26 m, 21 m
+  and 36 m; an ordinary block of flats changes little (14.3 m → 13.8 m). The tiles (about 650 MB) are read one by
+  one and only the heights kept. Buildings the model does not link, nearly all small outbuildings, are floors × 3.2 m.
+- **Use and materials.** The card shows the register's use class (`c_kayttark`, Statistics Finland's Building
+  classification 1994) where there is one, else the base map's building type (`tyyppi`); the load-bearing material
+  (`c_rakeaine`) and the facade material (`c_julkisivu`) from Helsinki's own code lists. Sources in `pipeline/codes.py`.
+- **Protected buildings.** A building is in the layer when the plan's building number (`pys_raknro`) matches its
+  register number, or when its representative point lies inside a protected outline: either alone misses some
+  (441 and 77). Groups follow the marking: sr-1, sr-2 and sr-3 (variants such as sr-2a included) and older plans'
+  marks (s, SO, AO/s, plain sr and others). There is no citywide legend: the wording differs from plan to plan, so the
+  card shows each building's own plan, marking and the first sentence of its regulation (in Finnish). A building in
+  several plans takes the strongest marking.
+- **RKY.** Buildings are matched by location: everything inside an area lights up, new buildings included.
+- **Wikidata.** Items are linked by the permanent building identifier (P3824 = VTJ-PRT): 4,627 items on 4,561
+  buildings. Most give a name and a completion year (which matches the register for 3,513 of 4,245 buildings; 148
+  differ by more than ten years, mostly the register being later; not used). Extracts are the article's
+  introduction cut at 450 characters. Oodi has no linked item: its Wikidata item carries no VTJ-PRT for this building.
+- **Street names.** From the street areas of the register of public areas, placed as in Amsterdam: tier 1 (shown from
+  afar) is the register's own class for main streets and motorways; streets not yet built are left out.
+- **Archive photos.** All of the Helsinki City Museum's images in Finna are downloaded (about 83,000 records, 834
+  pages) and matched by the address that ends their place (`subjectPlaces`), rather than searched address by address:
+  a free-text search for "Aleksanterinkatu 52" returns hundreds of loose hits, while the place field names the
+  address exactly. An address belongs to the building under the city's address point (the nearest within 15 m),
+  else to the building whose register address it is; corner buildings get all their addresses this way. The
+  museum's subject words rank the photos: buildings first, then street scenes, then the rest; interior-only photos
+  are left out, as are photos older than the building. One photo a decade, at most six. Only PDM, CC0 and CC BY 4.0.
+- **Quests.** Three walks (easy, medium, hard) in `pipeline/quests.py`, written for this map. `s09_quests` drops any
+  step whose claims are not word for word in its Wikipedia article, whose place is not found, or whose year is not
+  the map's year for the building. The hard walk uses 1800s photos from the City Museum as clues; Oodi, Kiasma and the
+  National Theatre are reached by their address, since Wikidata does not link them to their buildings.
+- **Known differences.** Checked against five landmarks: the Cathedral (registered as Hallituskatu 7) 1852, the
+  Sederholm house 1757, Kiasma 1998 and Oodi 2018 are right; the Railway Station gives 1909 (completed 1919).
+  Not corrected by hand.
 
 ## Licence
 
-Code: MIT (see [LICENSE](LICENSE)). Data keeps the licence of its source: 3D BAG CC BY 4.0; BAG, BGT, RCE, Wikidata and
-most City of Amsterdam data CC0; some city datasets and the street panoramas CC BY 4.0; Wikipedia text CC BY-SA;
-Wikimedia Commons photos each under their own licence, credited in the app. Stadsarchief Amsterdam photos are
-shown from the archive's image server and link to their records; the app stores only their identifiers.
+Code: MIT (see [LICENSE](LICENSE)), © Alexander Barakov and contributors.
+
+Data keeps the licence of its source:
+- Buildings: City of Helsinki, [Helsingin rakennukset](https://hri.fi/data/en_GB/dataset/helsingin-rakennukset),
+  WFS layer `avoindata:Rakennukset_alue_rekisteritiedot`. CC BY 4.0.
+- Land and water: City of Helsinki, [Helsingin maa- ja vesialueet](https://hri.fi/data/en_GB/dataset/helsingin-maa-ja-vesialueet),
+  WFS layers `Maavesi_manner`, `Maavesi_saaret`, `Maavesi_merialue`, `Maavesi_muut_vesialueet`. CC BY 4.0.
+- Attribution, as the city asks: "Data and maps © City of Helsinki, City Survey Services" ("Data ja kartat (c) Helsingin
+  kaupunki, kaupunkimittauspalvelut"). Downloaded via Helsinki Region Infoshare on 14 October 2026.
+- Protected buildings: City of Helsinki, [Asemakaavoilla suojellut rakennukset ja alueet Helsingissä](https://hri.fi/data/fi/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa),
+  WFS layer `Asemakaavoissa_suojellut_rakennukset_alue`. CC BY 4.0 (stated on HRI; the city's metadata record says
+  only "free, public data").
+- Street names: [Helsingin kaupungin yleisten alueiden rekisteri](https://hri.fi/data/fi/dataset/helsingin-kaupungin-yleisten-alueiden-rekisteri),
+  WFS layer `YLRE_Katualue_alue`. CC BY 4.0. "Lähde: Helsingin kaupungin yleisten alueiden rekisteri. Aineiston
+  ylläpitäjä on Helsingin kaupungin kaupunkiympäristön toimiala."
+- RKY areas: Finnish Heritage Agency (Museovirasto), WFS `rajapinta_suojellut:rky_alue`. CC BY 4.0
+  ([stated here](https://www.museovirasto.fi/fi/palvelut-ja-ohjeet/tietojarjestelmat/kulttuuriympariston-tietojarjestelmat/kulttuuriympaeristoen-paikkatietoaineistot));
+  Museovirasto gives no attribution wording, so the map credits "Museovirasto, RKY, CC BY 4.0".
+- Wikidata CC0. Wikipedia extracts CC BY-SA 4.0: each card links the article and the licence. Wikimedia Commons
+  photos each under their own licence, credited with author and licence on the card.
+- Heights: City of Helsinki, [Helsingin 3D-kaupunkimallit](https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli),
+  the city information model's LoD2 buildings as 3D Tiles. CC BY 4.0. The model's WFS
+  (`kartta.hel.fi/3d/citydb-wfs/wfs`) answered 503 on 14 October 2026; the 3D Tiles behind the city's own 3D viewer
+  carry the same buildings and attributes.
+- Archive photos: Helsinki City Museum (Helsingin kaupunginmuseo) via the [Finna API](https://api.finna.fi). Public
+  domain mark or CC BY 4.0, per photo. The museum asks that the photographer and Helsingin kaupunginmuseo are named;
+  the card does, links the Finna record and loads the image from Finna. The app stores only record ids, years,
+  photographers and licences.
+- Use classes: Statistics Finland, Building classification 1994. English names of the material codes: the national
+  Ryhti code lists (koodistot.suomi.fi).

@@ -1,32 +1,29 @@
 """Quests: short walks through the city as riddles. Three kinds of step, mixed within a quest:
 
   find    a riddle; the player finds the building on the map and clicks it. Hints first draw a circle around it,
-          then name the street; "Show me" flies there for no tiles.
+          then say more; "Show me" flies there for no crosses.
   year    the map flies to a building and hides its age (colours and card); the player guesses the year it was built.
   choice  the map flies to a building; the player picks one of three answers.
 
-Every claim rests on a source that s13_quests.py checks: an article that must contain the given strings, or a story
-of a context layer already checked by s08_curated. Where a step names a year, that year must also be the map's year
-for the building, so the card the player opens next tells the same story.
+Every claim rests on a source that s09_quests.py checks: a Wikipedia article that must contain the given strings.
+Where a step names a year, that year must also be the map's year for the building, so the card the player opens
+next tells the same story.
 
 `at` says where the step happens:
-  "wd:<article>"            the building(s) the article's Wikidata item names (BAG id, P5208)
-  "story:<layer>:<address>" the buildings of that curated story
-  "addr:<address>"          an address, geocoded to its BAG building
-  "rule:oldest"             the oldest building with an exact year, from the map's own data
+  "wd:<lang>:<article>"   the building(s) whose Wikidata item has that article (linked by VTJ-PRT, P3824)
+  "addr:<address>"        a street address, through the city's address points (as the archive photos are placed)
 `checks`: [(article, [strings])]: each article must contain each string (case-insensitive).
-`clue`: "today" (the building's photo), or an archive photo {"id", "thumb", "year"} from the Stadsarchief.
-Levels: 1 easy, 2 medium, 3 hard. Persecution and the Holocaust are deliberately not made into a game.
+`clue`: "today" (the building's Commons photo), or an archive photo from the Helsinki City Museum {"id", "year"}.
+Levels: 1 easy, 2 medium, 3 hard.
 """
 
 
-def T(en, nl):
-    return dict(en=en, nl=nl)
+def T(en, fi):
+    return dict(en=en, fi=fi)
 
 
-def find(at, riddle, hints, reveal, checks=(), clue=None, mode=None, layer=None):
-    return dict(kind="find", at=at, riddle=riddle, hints=hints, reveal=reveal, checks=list(checks), clue=clue,
-                mode=mode, layer=layer)
+def find(at, riddle, hints, reveal, checks=(), clue=None, mode=None):
+    return dict(kind="find", at=at, riddle=riddle, hints=hints, reveal=reveal, checks=list(checks), clue=clue, mode=mode)
 
 
 def year(at, ask, answer, reveal, checks):
@@ -38,372 +35,226 @@ def choice(at, ask, options, reveal, checks=()):
     return dict(kind="choice", at=at, ask=ask, options=options, reveal=reveal, checks=list(checks))
 
 
-def archive(id, thumb, year):
-    return dict(id=id, thumb=thumb, year=year)
+def archive(id, year):
+    return dict(id=id, year=year)
 
 
 QUESTS = [
     # ---------------------------------------------------------------- easy
-    dict(id="dam", level=1,
-         title=T("Around the Dam", "Rond de Dam"),
-         intro=T("Five buildings within a few minutes' walk of the city's main square. A gentle start.",
-                 "Vijf gebouwen op een paar minuten lopen van het belangrijkste plein van de stad. Een rustig begin."),
+    dict(id="senaatintori", level=1,
+         title=T("Around the Senate Square", "Senaatintorin ympärillä"),
+         intro=T("Five buildings on and near the city's grandest square. A gentle start.",
+                 "Viisi rakennusta kaupungin komeimman torin laidalla ja lähellä. Rauhallinen alku."),
          steps=[
-             find("wd:nl:Paleis op de Dam",
-                  T("Start at the heart of the city. Find the town hall that was so grand a king later moved in.",
-                    "Begin in het hart van de stad. Zoek het stadhuis dat zo groots was dat er later een koning introk."),
-                  [T("It fills one whole side of the Dam square.", "Het beslaat een hele kant van de Dam.")],
-                  T("The Royal Palace. Built 1648–1665 as the town hall, on 13,659 wooden piles; Louis Napoleon, "
-                    "king of Holland, made it his palace in 1808.",
-                    "Het Koninklijk Paleis. Gebouwd in 1648–1665 als stadhuis, op 13.659 houten palen; Lodewijk "
-                    "Napoleon, koning van Holland, maakte er in 1808 zijn paleis van."),
-                  checks=[("nl:Paleis op de Dam", ["13.659", "Lodewijk Napoleon", "1648 en 1665"])], clue="today"),
-             choice("wd:nl:Nieuwe Kerk (Amsterdam)",
-                    T("The church beside the palace has a royal role. Which one?",
-                      "De kerk naast het paleis heeft een koninklijke rol. Welke?"),
-                    [T("Kings and queens are inaugurated here", "Koningen en koninginnen worden hier ingehuldigd"),
-                     T("Kings and queens are buried here", "Koningen en koninginnen worden hier begraven"),
-                     T("Parliament opens its year here", "Het parlement opent hier zijn jaar")],
-                    T("Inaugurations, since William I, then sovereign prince, swore his oath on the constitution here "
-                      "in 1814. The royal crypt is in another Nieuwe Kerk: the one in Delft.",
-                      "Inhuldigingen, sinds Willem I, toen soeverein vorst, hier in 1814 de eed op de grondwet "
-                      "aflegde. De koninklijke grafkelder ligt in een andere Nieuwe Kerk: die van Delft."),
-                    checks=[("nl:Nieuwe Kerk (Amsterdam)", ["30 maart 1814", "inhuldigingen"]),
-                            ("nl:Nieuwe Kerk (Delft)", ["grafkelder van het Koninklijk Huis"])]),
-             choice("wd:nl:Station Amsterdam Centraal",
-                    T("The palace stands on 13,659 wooden piles. How many hold up Centraal Station?",
-                      "Het paleis staat op 13.659 houten palen. Op hoeveel palen staat het Centraal Station?"),
-                    [T("8,687", "8.687"), T("2,186", "2.186"), T("31,000", "31.000")],
-                    T("8,687, driven into three artificial islands in the IJ. The station cut the old harbour front "
-                      "off from open water. (2,186 is the Concertgebouw.)",
-                      "8.687, geslagen in drie kunstmatige eilanden in het IJ. Het station sneed het oude havenfront "
-                      "af van het open water. (2.186 is het Concertgebouw.)"),
-                    checks=[("nl:Station Amsterdam Centraal", ["8.687", "drie kunstmatige eilanden"]),
-                            ("nl:Concertgebouw (Amsterdam)", ["2186 heipalen"])]),
-             year("wd:nl:Beurs van Berlage",
-                  T("Berlage's exchange on the Damrak: plain brick after a century of ornament. When was it finished?",
-                    "Berlages beurs aan het Damrak: kale baksteen na een eeuw ornament. Wanneer was hij klaar?"),
-                  1903,
-                  T("1903, after five years of building. It is seen as a forerunner of the Amsterdam School, which was "
-                    "also partly a reaction against its strictness.",
-                    "1903, na vijf jaar bouwen. Hij geldt als voorloper van de Amsterdamse School, die deels ook een "
-                    "reactie was op zijn strengheid."),
-                  checks=[("nl:Beurs van Berlage", ["1898-1903", "voorloper van zowel het nieuwe bouwen, als de "
-                                                    "Amsterdamse School", "reactie op de strenge Beurs"])]),
-             find("wd:nl:Magna Plaza",
-                  T("Behind the palace stands a palace for letters: a neo-Gothic main post office with pointed "
-                    "towers. Today people go there to shop.",
-                    "Achter het paleis staat een paleis voor brieven: een neogotisch hoofdpostkantoor met spitse "
-                    "torens. Nu gaan mensen er winkelen."),
-                  [T("It is on the Nieuwezijds Voorburgwal, right behind the palace.",
-                     "Het staat aan de Nieuwezijds Voorburgwal, vlak achter het paleis.")],
-                  T("The old main post office, 1895–1899, now the Magna Plaza shopping centre.",
-                    "Het oude hoofdpostkantoor, 1895–1899, nu winkelcentrum Magna Plaza."),
-                  checks=[("nl:Magna Plaza", ["1895-1899", "Hoofdpostkantoor", "winkelcentrum"])]),
-         ]),
-    dict(id="tiny", level=1,
-         title=T("Tiny, narrow, crooked", "Klein, smal en scheef"),
-         intro=T("The odd ones: the smallest, the narrowest, the bent and the hidden.",
-                 "De vreemde eend: de kleinste, de smalste, de geknikte en de verborgene."),
-         steps=[
-             find("story:secrets:Oude Hoogstraat 22",
-                  T("2.02 metres wide and 5 metres deep. Find the house often called the smallest in Amsterdam.",
-                    "2,02 meter breed en 5 meter diep. Zoek het huis dat vaak het kleinste van Amsterdam heet."),
-                  [T("It is on the Oude Hoogstraat, between the Dam and the Nieuwmarkt, next to the old East India "
-                     "House.",
-                     "Het staat in de Oude Hoogstraat, tussen de Dam en de Nieuwmarkt, naast het oude Oost-Indisch "
-                     "Huis.")],
-                  T("Oude Hoogstraat 22.", "Oude Hoogstraat 22.")),
-             find("story:secrets:Singel 7",
-                  T("The narrowest house front in Amsterdam. Behind it, the house widens.",
-                    "De smalste gevel van Amsterdam. Daarachter wordt het huis breder."),
-                  [T("It is at the very start of the Singel, a few minutes from Centraal Station.",
-                     "Het staat helemaal aan het begin van het Singel, een paar minuten van het Centraal Station.")],
-                  T("Singel 7, the narrowest front in the city.", "Singel 7, de smalste gevel van de stad.")),
-             choice("story:secrets:Keizersgracht 123",
-                    T("Six heads stare from this front. Legend says they are burglars, beheaded one by one by the "
-                      "maid. Who are they really?",
-                      "Zes hoofden kijken vanaf deze gevel. Volgens de legende zijn het inbrekers, een voor een "
-                      "onthoofd door de dienstmeid. Wie zijn het echt?"),
-                    [T("Six classical gods", "Zes klassieke goden"), T("Six burgomasters", "Zes burgemeesters"),
-                     T("The builder's six sons", "De zes zonen van de bouwer")],
-                    T("Busts of six classical gods. The House with the Heads.",
-                      "Bustes van zes klassieke goden. Het Huis met de Hoofden.")),
-             find("story:secrets:Herengracht 170",
-                  T("This front bends twice so that it can follow the curve of its canal.",
-                    "Deze gevel knikt twee keer om de bocht van zijn gracht te volgen."),
-                  [T("It is on the Herengracht, where the canal bends between the Raadhuisstraat and the Leliegracht.",
-                     "Het staat aan de Herengracht, waar de gracht buigt tussen de Raadhuisstraat en de Leliegracht.")],
-                  T("The Bartolotti House, around 1617.", "Huis Bartolotti, rond 1617."),
-                  checks=[("nl:Huis Bartolotti", ["twee knikken", "1617"])], clue="today"),
-             find("story:secrets:Begijnhof 34",
-                  T("One of the city's last wooden houses, from about 1528, hides in a courtyard behind a gate off "
-                    "the Spui.",
-                    "Een van de laatste houten huizen van de stad, van rond 1528, verstopt zich op een hof achter "
-                    "een poort aan het Spui."),
-                  [T("The courtyard is the Begijnhof.", "Het hof is het Begijnhof.")],
-                  T("Het Houten Huis, Begijnhof 34.", "Het Houten Huys, Begijnhof 34."),
-                  checks=[("nl:Begijnhof (Amsterdam)", ["Begijnhof 34", "1528"])]),
-             choice("story:secrets:Oudezijds Voorburgwal 38",
-                    T("In 1661 a stocking merchant bought this canal house and built something in its attics. What?",
-                      "In 1661 kocht een kousenkoopman dit grachtenhuis en bouwde iets op de zolders. Wat?"),
-                    [T("A Catholic church", "Een katholieke kerk"), T("A synagogue", "Een synagoge"),
-                     T("A press for banned books", "Een drukkerij voor verboden boeken")],
-                    T("A Catholic church, at a time when Catholics could not worship in public: Our Lord in the "
-                      "Attic.",
-                      "Een katholieke kerk, in een tijd dat katholieken niet openlijk mochten kerken: Ons' Lieve Heer "
-                      "op Solder.")),
+             find("wd:fi:Helsingin tuomiokirkko",
+                  T("Start with one of the city's best-known symbols: a church whose roof is lined with statues of "
+                    "the apostles.",
+                    "Aloita yhdestä kaupungin tunnetuimmista symboleista: kirkosta, jonka katolla seisovat "
+                    "apostolien patsaat."),
+                  [T("It stands on the edge of the Senate Square.", "Se seisoo Senaatintorin laidalla.")],
+                  T("Helsinki Cathedral, first called St Nicholas' Church. Carl Ludvig Engel designed it; it was "
+                    "completed in 1852.",
+                    "Helsingin tuomiokirkko, alun perin Nikolainkirkko. Sen suunnitteli Carl Ludvig Engel, ja se "
+                    "valmistui vuonna 1852."),
+                  checks=[("fi:Helsingin tuomiokirkko", ["apostolipatsaineen", "Senaatintorin laidalla",
+                                                          "Nikolainkirkko", "Carl Ludvig Engelin suunnittelema",
+                                                          "Kirkko valmistui vuonna 1852"])],
+                  clue="today"),
+             year("addr:Aleksanterinkatu 16",
+                  T("On the Senate Square, at the corner of Aleksanterinkatu and Katariinankatu, the merchant Johan "
+                    "Sederholm built a stone house. It is the oldest building in the inner city. When was it finished?",
+                    "Senaatintorilla Aleksanterinkadun ja Katariinankadun kulmassa on kauppaneuvos Johan Sederholmin "
+                    "rakennuttama kivitalo, kantakaupungin vanhin rakennus. Minä vuonna se valmistui?"),
+                  1757,
+                  T("1757. Sederholm had it built in 1756–1757: two storeys, a large attic and a vaulted cellar.",
+                    "1757. Sederholm rakennutti talon vuosina 1756–1757: kaksi kerrosta, iso ullakko ja suuri "
+                    "kellariholvi."),
+                  checks=[("fi:Sederholmin talo", ["vuonna 1757 valmistunut kivitalo", "Aleksanterinkadun ja "
+                                                   "Katariinankadun kulmassa", "kantakaupungin vanhin rakennus",
+                                                   "vuosina 1756-1757", "suuri kellariholvi"])]),
+             choice("wd:fi:Valtioneuvoston linna",
+                    T("This palace fills its whole block beside the square. It was built for the Senate. Who "
+                      "designed it?",
+                      "Tämä palatsi täyttää koko korttelinsa torin laidalla. Se rakennettiin senaattia varten. Kuka "
+                      "sen suunnitteli?"),
+                    [T("Carl Ludvig Engel", "Carl Ludvig Engel"), T("Theodor Höijer", "Theodor Höijer"),
+                     T("Eliel Saarinen", "Eliel Saarinen")],
+                    T("Carl Ludvig Engel. The Senate worked here from 1822 to 1918; since then it has been the "
+                      "Government Palace.",
+                      "Carl Ludvig Engel. Senaatti toimi rakennuksessa vuodet 1822–1918; nykyään se on "
+                      "Valtioneuvoston linna."),
+                    checks=[("fi:Valtioneuvoston linna", ["Rakennus kattaa koko", "arkkitehti Carl Ludvig Engel",
+                                                          "Suomen senaattia varten", "vuodet 1822–1918"])]),
+             find("wd:fi:Helsingin yliopiston päärakennus",
+                  T("Engel also designed the building the university moved into when it came to Helsinki. Find "
+                    "its main building on the square.",
+                    "Engel suunnitteli myös rakennuksen, johon yliopisto muutti tultuaan Helsinkiin. Etsi sen "
+                    "päärakennus torin laidalta."),
+                  [T("It faces the Government Palace across the Senate Square.",
+                     "Se on Valtioneuvoston linnaa vastapäätä Senaatintorin toisella puolella.")],
+                  T("The main building of the University of Helsinki, an Empire building by Carl Ludvig Engel.",
+                    "Helsingin yliopiston päärakennus, Carl Ludvig Engelin suunnittelema empirerakennus."),
+                  checks=[("fi:Helsingin yliopiston päärakennus", ["Carl Ludvig Engelin suunnittelema empirerakennus",
+                                                                   "akatemia oli siirrettävä Helsinkiin"])]),
+             year("wd:fi:Uspenskin katedraali",
+                  T("East of the square, on the rocks of Katajanokka, stands a red-brick church. When was it "
+                    "consecrated?",
+                    "Torin itäpuolella Katajanokan kalliolla on punatiilinen kirkko. Minä vuonna se vihittiin "
+                    "käyttöön?"),
+                  1868,
+                  T("1868, after six years of building. Its bricks came from the fortress of Bomarsund on Åland, "
+                    "which was being torn down.",
+                    "1868, kuuden vuoden rakennustöiden jälkeen. Tiilet tuotiin Ahvenanmaalta Bomarsundin "
+                    "purettavasta linnoituksesta."),
+                  checks=[("fi:Uspenskin katedraali", ["Punatiilinen kirkko", "Katajanokan kalliolla",
+                                                       "vuosina 1862–1868", "lokakuuta 1868",
+                                                       "Bomarsundin purettavasta linnoituksesta"])]),
          ]),
     # ---------------------------------------------------------------- medium
-    dict(id="rembrandt", level=2,
-         title=T("Rembrandt's city", "De stad van Rembrandt"),
-         intro=T("Where he lived, what he drew, where he went broke and where he was buried.",
-                 "Waar hij woonde, wat hij tekende, waar hij failliet ging en waar hij begraven werd."),
+    dict(id="rautatientori", level=2,
+         title=T("From the Railway Square to Töölönlahti", "Rautatientorilta Töölönlahdelle"),
+         intro=T("Granite, stone and glass: a century of public buildings on one walk.",
+                 "Graniittia, kiveä ja lasia: vuosisata julkisia rakennuksia yhdellä kävelyllä."),
          steps=[
-             find("wd:nl:Rembrandthuis",
-                  T("In 1639 he bought a house on the Jodenbreestraat for 13,000 guilders. Nineteen years later, "
-                    "bankrupt, he lost it. Find it.",
-                    "In 1639 kocht hij een huis in de Jodenbreestraat voor 13.000 gulden. Negentien jaar later, "
-                    "failliet, raakte hij het kwijt. Zoek het."),
-                  [T("The Jodenbreestraat runs from the Zuiderkerk to the Waterlooplein market.",
-                     "De Jodenbreestraat loopt van de Zuiderkerk naar de markt op het Waterlooplein.")],
-                  T("The Rembrandt House. After his bankruptcy it was auctioned in 1658, for 11,000 guilders.",
-                    "Het Rembrandthuis. Na zijn faillissement werd het in 1658 geveild, voor 11.000 gulden."),
-                  checks=[("nl:Rembrandthuis", ["dertienduizend", "faillissement", "elfduizend", "1658"])],
+             find("wd:fi:Helsingin päärautatieasema",
+                  T("Stone giants holding lamps guard its door, and a clock tower rises above it.",
+                    "Sen ovea vartioivat lyhtyjä kantavat kivijätit, ja sen yllä kohoaa kellotorni."),
+                  [T("The trains leave from behind it.", "Sen takaa lähtevät junat.")],
+                  T("The Central Railway Station. Eliel Saarinen designed the granite building; the Lantern Bearers "
+                    "are by the sculptor Emil Wikström.",
+                    "Helsingin päärautatieasema. Graniittisen asemarakennuksen suunnitteli Eliel Saarinen, ja "
+                    "Lyhdynkantajat-patsaat ovat kuvanveistäjä Emil Wikströmin."),
+                  checks=[("fi:Helsingin päärautatieasema", ["Eliel Saarisen", "graniittinen asemarakennus",
+                                                             "kellotornistaan", "Emil Wikströmin Lyhdynkantajat-patsaista"])],
                   clue="today"),
-             find("wd:nl:Zuiderkerk (Amsterdam)",
-                  T("A few steps from his door rises the first church Amsterdam designed for Protestant worship, in "
-                    "use from 1611.",
-                    "Een paar stappen van zijn deur staat de eerste kerk die Amsterdam ontwierp voor de protestantse "
-                    "eredienst, in gebruik vanaf 1611."),
-                  [T("Its tall tower stands just north of the Jodenbreestraat.",
-                     "De hoge toren staat net ten noorden van de Jodenbreestraat.")],
-                  T("The Zuiderkerk, begun in 1603.", "De Zuiderkerk, begonnen in 1603."),
-                  checks=[("nl:Zuiderkerk (Amsterdam)", ["eerste voor de protestantse eredienst", "1611", "1603"])]),
-             find("story:secrets:Nieuwmarkt 4",
-                  T("Upstairs in this old city gate the surgeons met; he painted their anatomy lesson.",
-                    "Boven in deze oude stadspoort vergaderden de chirurgijns; hij schilderde hun anatomische les."),
-                  [T("It stands like a small castle in the middle of the Nieuwmarkt.",
-                     "Het staat als een kasteeltje midden op de Nieuwmarkt.")],
-                  T("De Waag: a city gate of 1488, later the weigh house.",
-                    "De Waag: een stadspoort uit 1488, later het waaggebouw.")),
-             choice("wd:nl:Montelbaanstoren",
-                    T("He drew this tower in 1644. What is missing from his drawing?",
-                      "Hij tekende deze toren in 1644. Wat ontbreekt er op zijn tekening?"),
-                    [T("The spire Hendrick de Keyser put on it in 1606", "De spits die Hendrick de Keyser er in 1606 op zette"),
-                     T("The clock", "De klok"), T("The water in front of it", "Het water ervoor")],
-                    T("The spire. He drew the tower without the crown De Keyser had added in 1606.",
-                      "De spits. Hij tekende de toren zonder de bekroning die De Keyser er in 1606 op had gezet."),
-                    checks=[("nl:Montelbaanstoren", ["tekende de toren in 1644, maar zonder de opbouw van De Keyser",
-                                                    "1606"])]),
-             choice("wd:nl:Westerkerk (Amsterdam)",
-                    T("He was buried in this church in 1669. Where exactly is his grave?",
-                      "Hij werd in 1669 in deze kerk begraven. Waar ligt zijn graf precies?"),
-                    [T("Nobody knows", "Niemand weet het"), T("Under the pulpit", "Onder de preekstoel"),
-                     T("At the foot of the tower", "Aan de voet van de toren")],
-                    T("Nobody knows. A memorial was put up by the north aisle in 1906.",
-                      "Niemand weet het. In 1906 kwam er een gedenkteken bij de noordelijke zijbeuk."),
-                    checks=[("nl:Westerkerk (Amsterdam)", ["plaats van het graf onbekend", "1906"])]),
-         ]),
-    dict(id="companies", level=2,
-         title=T("Ships, spices and companies", "Schepen, specerijen en compagnieën"),
-         intro=T("The trade that made the Golden Age, and its darker side, in five buildings.",
-                 "De handel die de Gouden Eeuw maakte, en de schaduwkant ervan, in vijf gebouwen."),
-         steps=[
-             find("story:asia:Oude Hoogstraat 24",
-                  T("Find the headquarters of the Dutch East India Company, the VOC, built in 1604.",
-                    "Zoek het hoofdkantoor van de Verenigde Oost-Indische Compagnie, de VOC, gebouwd in 1604."),
-                  [T("It is on the Oude Hoogstraat, by the Kloveniersburgwal.",
-                     "Het staat aan de Oude Hoogstraat, bij de Kloveniersburgwal.")],
-                  T("The East India House.", "Het Oost-Indisch Huis."),
-                  checks=[("nl:Oost-Indisch Huis", ["gebouwd 1604"])]),
-             find("story:atlantic:Herenmarkt 99",
-                  T("The other company sailed west. The West India Company, which ran the slave trade and the colony of New "
-                    "Netherland, met here from 1623 to 1647.",
-                    "De andere compagnie voer naar het westen. De West-Indische Compagnie, die de slavenhandel en de "
-                    "kolonie Nieuw-Nederland dreef, vergaderde hier van 1623 tot 1647."),
-                  [T("It stands on the Herenmarkt, a square by the Brouwersgracht.",
-                     "Het staat aan de Herenmarkt, een pleintje bij de Brouwersgracht.")],
-                  T("The West India House.", "Het West-Indisch Huis.")),
-             choice("wd:nl:Schreierstoren",
-                    T("On 4 April 1609 Henry Hudson sailed from this tower for the VOC. What was he sent to find?",
-                      "Op 4 april 1609 vertrok Henry Hudson bij deze toren voor de VOC. Wat moest hij vinden?"),
-                    [T("A western passage to the Indies", "Een westelijke doorvaart naar Indië"),
-                     T("Whaling grounds off Spitsbergen", "Walvisgronden bij Spitsbergen"),
-                     T("Gold on the coast of Africa", "Goud aan de kust van Afrika")],
-                    T("A western passage to the Indies. A plaque on the tower, given by a historical society in "
-                      "New York, remembers the voyage.",
-                      "Een westelijke doorvaart naar Indië. Een plaquette op de toren, geschonken door een "
-                      "historisch genootschap uit New York, herinnert aan de reis."),
-                    checks=[("nl:Schreierstoren", ["4 april 1609", "westelijke doorvaart naar Indië", "New York"])]),
-             choice("wd:nl:Trippenhuis",
-                    T("Two brothers built this palace: two whole houses behind one front. Its chimneys are shaped "
-                      "like mortars. Why?",
-                      "Twee broers bouwden dit paleis: twee hele huizen achter één gevel. De schoorstenen hebben de "
-                      "vorm van mortieren. Waarom?"),
-                    [T("They got rich trading arms", "Ze werden rijk met wapenhandel"),
-                     T("They commanded the city's guns", "Ze voerden het bevel over het stadsgeschut"),
-                     T("Mortar chimneys were the fashion", "Mortierschoorstenen waren in de mode")],
-                    T("The Trip brothers made their fortune from arms; the chimneys point to their trade.",
-                      "De broers Trip verdienden hun fortuin met wapens; de schoorstenen verwijzen naar hun handel."),
-                    checks=[("nl:Trippenhuis", ["twee volledige huizen achter een gemeenschappelijke voorgevel",
-                                               "hoekschoorstenen in de vorm van mortieren"])]),
-             find("story:asia:Prins Hendrikkade 108",
-                  T("Six shipping companies that sailed to the Indies shared one office from 1913. It is called the "
-                    "first building wholly in the Amsterdam School style.",
-                    "Zes rederijen die op Indië voeren deelden vanaf 1913 één kantoor. Het heet het eerste gebouw "
-                    "geheel in de stijl van de Amsterdamse School."),
-                  [T("It stands on a point of land on the Prins Hendrikkade, east of Centraal Station.",
-                     "Het staat op een punt aan de Prins Hendrikkade, ten oosten van het Centraal Station.")],
-                  T("The Scheepvaarthuis, now a hotel.", "Het Scheepvaarthuis, nu een hotel."),
-                  checks=[("nl:Scheepvaarthuis", ["zes Amsterdamse rederijen", "eerste gebouw dat geheel in de stijl "
-                                                  "van de Amsterdamse School"])]),
-         ]),
-    dict(id="brick", level=2,
-         title=T("Red brick dreams", "Dromen in rode baksteen"),
-         intro=T("The Amsterdam School and the new city of the 1920s, out beyond the canals.",
-                 "De Amsterdamse School en de nieuwe stad van de jaren twintig, voorbij de grachten."),
-         steps=[
-             find("addr:Oostzaanstraat 45",
-                  T("Workers' housing by Michel de Klerk, built 1914–1921. People named it after its shape.",
-                    "Arbeiderswoningen van Michel de Klerk, gebouwd in 1914–1921. De volksmond noemde het naar de "
-                    "vorm."),
-                  [T("It is in the Spaarndammerbuurt, west of the centre, by the railway.",
-                     "Het staat in de Spaarndammerbuurt, ten westen van het centrum, bij het spoor.")],
-                  T("Het Schip, the Ship, now the museum of the Amsterdam School.",
-                    "Het Schip, nu het museum van de Amsterdamse School."),
-                  checks=[("nl:Museum Het Schip", ["1914-1921", "Het Schip"])]),
-             year("wd:nl:12-verdiepingenhuis",
-                  T("Amsterdam's first tower of flats, nicknamed the Skyscraper: twelve storeys, when the rules "
-                    "allowed four. When was it built?",
-                    "De eerste woontoren van Amsterdam, bijgenaamd De Wolkenkrabber: twaalf verdiepingen, toen de "
-                    "regels er vier toestonden. Wanneer is hij gebouwd?"),
-                  1932,
-                  T("1932, by J.F. Staal. The building rules had to be changed first.",
-                    "1932, door J.F. Staal. Eerst moest de bouwverordening worden aangepast."),
-                  checks=[("nl:12-verdiepingenhuis", ["uit 1932", "maximaal vier woonlagen",
-                                                      "eerste van dat type in Amsterdam"])]),
-             find("addr:Olympisch Stadion 2",
-                  T("At the Games of 1928 a fire burned in a concrete bowl on top of this stadium's tower: the first "
-                    "Olympic flame in history.",
-                    "Bij de Spelen van 1928 brandde in een betonnen schaal boven op de toren van dit stadion een "
-                    "vuur: het eerste olympische vuur in de geschiedenis."),
-                  [T("It is in the south-west of the city, at the end of the Stadionweg.",
-                     "Het ligt in het zuidwesten van de stad, aan het eind van de Stadionweg.")],
-                  T("The Olympic Stadium, by Jan Wils.", "Het Olympisch Stadion, van Jan Wils."),
-                  checks=[("nl:Olympisch Stadion (Amsterdam)", ["eerste olympische vuur", "Jan Wils"])]),
-             choice("wd:nl:De Bazel (gebouw)",
-                    T("This bank headquarters on the Vijzelstraat took from 1919 to 1926 to build. Who works in it "
-                      "now?",
-                      "Aan dit hoofdkantoor van een bank aan de Vijzelstraat werd van 1919 tot 1926 gebouwd. Wie "
-                      "werkt er nu?"),
-                    [T("The City Archives", "Het Stadsarchief"), T("The Dutch central bank", "De Nederlandsche Bank"),
-                     T("The university library", "De universiteitsbibliotheek")],
-                    T("The Stadsarchief, since 2007: the archive whose old photos you can browse in the cards on "
-                      "this map.",
-                      "Het Stadsarchief, sinds 2007: het archief waarvan je de oude foto's in de kaartjes op deze "
-                      "kaart kunt bekijken."),
-                    checks=[("nl:De Bazel (gebouw)", ["1919 en 1926", "Sinds 2007 is er het Stadsarchief"])]),
-             year("wd:nl:Concertgebouw (Amsterdam)",
-                  T("Back to the 19th century for the last one: the concert hall on 2,186 piles. When did it open?",
-                    "Voor de laatste terug naar de negentiende eeuw: de concertzaal op 2186 palen. Wanneer ging hij "
-                    "open?"),
-                  1888,
-                  T("On 11 April 1888.", "Op 11 april 1888."),
-                  checks=[("nl:Concertgebouw (Amsterdam)", ["geopend op 11 april 1888", "2186 heipalen"])]),
+             year("wd:fi:Ateneumin taidemuseo",
+                  T("On the Railway Square, an art museum of the Finnish National Gallery fills a neo-Renaissance "
+                    "palace. When was the building completed?",
+                    "Rautatientorin laidalla on Kansallisgalleriaan kuuluva taidemuseo uusrenessanssipalatsissa. "
+                    "Minä vuonna rakennus valmistui?"),
+                  1887,
+                  T("1887, designed by Theodor Höijer. The museum of contemporary art also worked here, from 1991 "
+                    "to 1998.",
+                    "1887, Theodor Höijerin suunnittelemana. Myös nykytaiteen museo toimi Ateneumissa vuosina "
+                    "1991–1998."),
+                  checks=[("fi:Ateneumin taidemuseo", ["osa Kansallisgalleriaa", "Theodor Höijerin suunnittelema",
+                                                       "uusrenessanssirakennus valmistui 1887",
+                                                       "Nykytaiteen museo toimi Ateneumissa 1991–1998"])]),
+             find("addr:Läntinen Teatterikuja 1",
+                  T("Across the square stands a theatre built of grey granite: the oldest professional theatre in "
+                    "the Finnish language.",
+                    "Torin toisella laidalla on harmaasta graniitista rakennettu teatteri, vanhin suomenkielinen "
+                    "ammattiteatteri."),
+                  [T("It faces the Ateneum across the Railway Square.",
+                     "Se on Ateneumia vastapäätä Rautatientorin toisella puolella.")],
+                  T("The Finnish National Theatre. Its national romantic house by Onni Törnqvist-Tarjanne is built "
+                    "of grey granite from Uusikaupunki.",
+                    "Suomen Kansallisteatteri. Onni Törnqvist-Tarjanteen suunnittelema kansallisromanttinen talo on "
+                    "rakennettu Uudenkaupungin harmaasta graniitista."),
+                  checks=[("fi:Suomen Kansallisteatteri", ["vanhin suomenkielinen ammattiteatteri",
+                                                           "Rautatientorin varrelle",
+                                                           "Onni Törnqvist-Tarjanteen suunnittelema kansallisromanttinen talo",
+                                                           "Uudenkaupungin harmaasta graniitista"])]),
+             year("addr:Mannerheiminaukio 2",
+                  T("A museum of contemporary art designed by the American architect Steven Holl. When was it "
+                    "completed?",
+                    "Yhdysvaltalaisen arkkitehdin Steven Hollin suunnittelema nykytaiteen museo. Minä vuonna se "
+                    "valmistui?"),
+                  1998,
+                  T("1998. Until then the museum of contemporary art worked in the Ateneum.",
+                    "1998. Siihen asti nykytaiteen museo toimi Ateneumissa."),
+                  checks=[("fi:Kiasma", ["nykytaiteen museo", "Steven Hollin suunnittelema Kiasma-rakennus valmistui 1998",
+                                         "Museo toimi aluksi Ateneum-rakennuksessa"])]),
+             find("addr:Töölönlahdenkatu 4",
+                  T("Last, the youngest public building of the walk: the city's central library, opened in December "
+                    "2018.",
+                    "Lopuksi kävelyn nuorin julkinen rakennus: kaupungin keskustakirjasto, joka avattiin joulukuussa "
+                    "2018."),
+                  [T("It stands on the edge of the Kansalaistori square, near Töölönlahti.",
+                     "Se on Kansalaistorin laidalla Töölönlahden läheisyydessä.")],
+                  T("Oodi, the Helsinki Central Library, opened on 5 December 2018. The Finnish firm ALA won the "
+                    "international design competition.",
+                    "Helsingin keskustakirjasto Oodi avattiin 5. joulukuuta 2018. Kansainvälisen "
+                    "suunnittelukilpailun voitti Arkkitehtitoimisto ALA."),
+                  checks=[("fi:Helsingin keskustakirjasto Oodi", ["Kansalaistorin laidalla",
+                                                                  "Töölönlahden läheisyydessä",
+                                                                  "Arkkitehtitoimisto ALA",
+                                                                  "joulukuuta 2018"])]),
          ]),
     # ---------------------------------------------------------------- hard
-    dict(id="then", level=3,
-         title=T("Then and now", "Toen en nu"),
-         intro=T("Six photos from the city archive, 1950–1953. No names, no text: find each building as it "
-                 "stands today.",
-                 "Zes foto's uit het Stadsarchief, 1950–1953. Geen namen, geen tekst: vind elk gebouw zoals het er "
-                 "nu staat."),
+    dict(id="vanhat-kuvat", level=3,
+         title=T("Old photographs", "Vanhoja valokuvia"),
+         intro=T("Five buildings that the Helsinki City Museum's photographers captured in the 1800s. Find each from its "
+                 "old photo.",
+                 "Viisi rakennusta, jotka Helsingin kaupunginmuseon kuvaajat ikuistivat 1800-luvulla. Etsi kukin vanhan "
+                 "kuvan perusteella."),
          steps=[
-             find("wd:nl:Paleis op de Dam",
-                  T("Lit up at night, seen from a hotel across the square.",
-                    "'s Avonds verlicht, gezien vanuit een hotel aan de overkant van het plein."),
-                  [T("The square is the Dam.", "Het plein is de Dam.")],
-                  T("The Royal Palace, 1952.", "Het Koninklijk Paleis, 1952."),
-                  clue=archive("b17df159-1b9f-ad04-ab2f-d7ab3106ffeb", "7968494b-6308-cc73-2ef5-d52467fa7493", 1952)),
-             find("wd:nl:Schreierstoren",
-                  T("A round brick tower by the water's edge.", "Een ronde bakstenen toren aan het water."),
-                  [T("It stands on the Prins Hendrikkade, near Centraal Station.",
-                     "Hij staat aan de Prins Hendrikkade, bij het Centraal Station.")],
-                  T("The Schreierstoren, around 1487, in 1950.", "De Schreierstoren, rond 1487, in 1950."),
-                  clue=archive("a87756a3-4e1f-af65-a924-40d80355ad24", "7fbed6ac-c725-10a8-d4dd-de0c20db48d1", 1950)),
-             find("wd:nl:Koninklijk Theater Carré",
-                  T("A long white building across a wide river, seen from a bridge.",
-                    "Een lang wit gebouw aan een brede rivier, gezien vanaf een brug."),
-                  [T("The river is the Amstel; the bridge is the Hoge Sluis.",
-                     "De rivier is de Amstel; de brug is de Hoge Sluis.")],
-                  T("Carré, built as a stone circus in 1887.", "Carré, in 1887 gebouwd als stenen circus."),
-                  checks=[("nl:Koninklijk Theater Carré", ["3 december 1887", "Oscar Carré"])],
-                  clue=archive("22491164-a156-11e4-8ca4-9367051b6c01", "328e5cbc-1a08-cb7b-1637-106c11b3027e", 1953)),
-             find("wd:nl:Montelbaanstoren",
-                  T("A tower with a pointed crown at the end of a long, straight canal.",
-                    "Een toren met een spitse bekroning aan het eind van een lange, rechte gracht."),
-                  [T("The canal is the Oudeschans, east of the Nieuwmarkt.",
-                     "De gracht is de Oudeschans, ten oosten van de Nieuwmarkt.")],
-                  T("The Montelbaanstoren.", "De Montelbaanstoren."),
-                  clue=archive("042aec7f-4d0a-c571-d0e2-d6994b44c3c2", "05eff68b-0365-ab7b-b7c7-07a3d43357cb", 1953)),
-             find("wd:nl:Krijtberg",
-                  T("Two slender church towers squeezed between canal houses.",
-                    "Twee slanke kerktorens tussen grachtenhuizen geperst."),
-                  [T("The canal is the Singel, a short walk from the Spui.",
-                     "De gracht is het Singel, op een paar minuten van het Spui.")],
-                  T("De Krijtberg, a neo-Gothic Jesuit church begun in 1881.",
-                    "De Krijtberg, een neogotische jezuïetenkerk, begonnen in 1881."),
-                  checks=[("nl:Krijtberg", ["In 1881 begonnen", "neogotische", "jezuïeten"])],
-                  clue=archive("705d6256-8527-11e4-9411-6f3b4156ffed", "56e134e4-4265-a557-0508-099ade3c1ae1", 1953)),
-             find("wd:nl:12-verdiepingenhuis",
-                  T("A lonely tower of flats, far from the canals.", "Een eenzame woontoren, ver van de grachten."),
-                  [T("It is in the south, on a square in the Rivierenbuurt.",
-                     "Hij staat in het zuiden, aan een plein in de Rivierenbuurt.")],
-                  T("The Wolkenkrabber, 1932.", "De Wolkenkrabber, 1932."),
-                  clue=archive("701eca1e-8527-11e4-bc53-5b87fa8df581", "608b012f-8ee6-184f-6414-a160f0027bab", 1953)),
-         ]),
-    dict(id="map", level=3,
-         title=T("Read the map", "Lees de kaart"),
-         intro=T("No riddles about history this time: the answers are in the map's colours and shapes.",
-                 "Deze keer geen raadsels over geschiedenis: de antwoorden zitten in de kleuren en vormen van de "
-                 "kaart."),
-         steps=[
-             find("rule:oldest",
-                  T("Find the oldest building standing in Amsterdam.",
-                    "Zoek het oudste gebouw dat in Amsterdam nog staat."),
-                  [T("Colour the map by period and look for the darkest colour in the old centre.",
-                     "Kleur de kaart naar periode en zoek de donkerste kleur in het oude centrum.")],
-                  T("The Oude Kerk, consecrated in 1306: the oldest building in the city.",
-                    "De Oude Kerk, gewijd in 1306: het oudste gebouw van de stad."),
-                  checks=[("nl:Oude Kerk (Amsterdam)", ["oudste nog bestaande gebouw van Amsterdam", "1306"])],
-                  mode="period"),
-             find("addr:Amstelplein 1",
-                  T("Find the tallest building in Amsterdam. Chimneys do not count.",
-                    "Zoek het hoogste gebouw van Amsterdam. Schoorstenen tellen niet mee."),
-                  [T("Colour the map by floors and look south-east, by Amstel station.",
-                     "Kleur de kaart naar verdiepingen en kijk naar het zuidoosten, bij station Amstel.")],
-                  T("The Rembrandt Tower: 150 metres with its 15-metre antenna, the tallest skyscraper in Amsterdam, "
-                    "opened in 1995. (The spike in the western docks is the 175-metre chimney of the Hemweg power station.)",
-                    "De Rembrandttoren: 150 meter met zijn antenne van 15 meter, de hoogste wolkenkrabber van "
-                    "Amsterdam, geopend in 1995. (De piek in het Westelijk Havengebied is de schoorsteen van 175 "
-                    "meter van de Hemwegcentrale.)"),
-                  checks=[("nl:Rembrandttoren", ["hoogste wolkenkrabber van Amsterdam", "15 meter hoge antenne 150 meter",
-                                                 "1995", "Amstelstation"]),
-                          ("nl:Centrale Hemweg", ["De schoorsteen is 175 meter hoog"])], mode="floors"),
-             find("story:secrets:Funenkade 5",
-                  T("A windmill in the middle of the city: two wooden octagons stacked on a brick base.",
-                    "Een molen midden in de stad: twee houten achtkanten op een stenen voet."),
-                  [T("It stands on the Funenkade, east of the old centre.",
-                     "Hij staat aan de Funenkade, ten oosten van het oude centrum.")],
-                  T("De Gooyer.", "De Gooyer.")),
-             year("wd:nl:Noorderkerk (Amsterdam)",
-                  T("A church for the poor of the Jordaan, in the shape of a Greek cross. Guess its year without the "
-                    "colours.",
-                    "Een kerk voor de armen van de Jordaan, in de vorm van een Grieks kruis. Raad het jaar zonder "
-                    "de kleuren."),
-                  1622,
-                  T("Built 1620–1623.", "Gebouwd in 1620–1623."),
-                  checks=[("nl:Noorderkerk (Amsterdam)", ["tussen 1620 en 1623", "Grieks kruis"])]),
+             find("wd:fi:Kaivohuone",
+                  T("Spa guests in front of a wooden pavilion. The spa itself stood on the shore nearby.",
+                    "Kylpylävieraita puisen paviljongin edessä. Itse kylpylä oli lähellä merenrannassa."),
+                  [T("It stands in Kaivopuisto, on Iso Puistotie.", "Se on Kaivopuistossa Ison Puistotien varrella.")],
+                  T("Kaivohuone, a wooden building by Carl Ludvig Engel. It opened together with the seaside spa on "
+                    "5 June 1838.",
+                    "Kaivohuone, Carl Ludvig Engelin suunnittelema puurakennus. Se avattiin yhdessä merenrannan "
+                    "kylpylän kanssa 5. kesäkuuta 1838."),
+                  checks=[("fi:Kaivohuone", ["Kaivopuistossa Ison Puistotien varrella",
+                                             "puurakennuksen on suunnitellut arkkitehti Carl Ludvig Engel",
+                                             "merenrannassa sijainneen kylpylän", "kesäkuuta 1838"])],
+                  clue=archive("hkm.ADA0EE26-D07A-4AC1-ACAE-897B1985300F", 1870)),
+             find("wd:fi:Ritarihuone",
+                  T("A neo-Gothic house built so that the nobility had a place to meet for the Diet.",
+                    "Uusgoottilainen talo, joka rakennettiin aateliston kokoontumispaikaksi valtiopäiviä varten."),
+                  [T("It stands in Kruununhaka.", "Se on Kruununhaassa.")],
+                  T("The House of Nobility, designed by Georg Theodor von Chiewitz.",
+                    "Ritarihuone, arkkitehti Georg Theodor von Chiewitzin suunnittelema."),
+                  checks=[("fi:Ritarihuone", ["uusgoottilainen valtiopäivärakennus", "Kruununhaassa",
+                                              "Suomen aatelisto tarvitsi kokoontumispaikan",
+                                              "suunnitellut arkkitehti Georg Theodor von Chiewitz"])],
+                  clue=archive("hkm.E356CB51-9283-4017-99C7-110D34AC64EE", 1870)),
+             find("wd:fi:Svenska Teatern",
+                  T("“Nya theatern”, the new theatre, photographed in the year it opened, after a fire had destroyed "
+                    "the one before it.",
+                    "”Nya theatern”, uusi teatteri, kuvattuna avajaisvuonnaan sen jälkeen, kun tulipalo oli tuhonnut "
+                    "edellisen."),
+                  [T("It stands at the west end of the Esplanade park, between its two streets.",
+                     "Se on Esplanadin puiston länsipäässä, Etelä- ja Pohjoisesplanadin välissä.")],
+                  T("Svenska Teatern, rebuilt by the Russian architect Nicolas Benois and opened in 1866. His "
+                    "auditorium and foyer survive almost as they were.",
+                    "Svenska Teatern. Venäläinen arkkitehti Nicolas Benois suunnitteli uuden rakennuksen, joka vihittiin "
+                    "käyttöön vuonna 1866. Benois’n salonki ja lämpiö ovat säilyneet lähes alkuperäisinä."),
+                  checks=[("fi:Svenska Teatern", ["Esplanadin puiston länsipäässä", "tuhoutui tulipalossa",
+                                                  "vuonna 1866 käyttöön vihittiin", "venäläinen arkkitehti Nicolas Benois",
+                                                  "salonki ja lämpiö"])],
+                  clue=archive("hkm.1B604709-EE8D-4989-A91B-FCC2DB27CB08", 1866)),
+             find("wd:fi:Presidentinlinna",
+                  T("When this photo was taken it was the emperor's palace in Helsinki. Before that it had been a "
+                    "merchant family's house.",
+                    "Kuvan aikaan tämä oli keisarillinen palatsi Helsingissä. Sitä ennen se oli kauppiassuvun talo."),
+                  [T("It stands on the edge of the Market Square.", "Se on Kauppatorin laidalla.")],
+                  T("The Presidential Palace. Pehr Granstedt designed it in 1814 as a merchant house; the Senate bought "
+                    "it in 1837 as the emperors' palace, and it was refitted for the President in 1921.",
+                    "Presidentinlinna. Pehr Granstedt suunnitteli sen vuonna 1814 kauppiastaloksi; senaatti osti sen "
+                    "vuonna 1837 keisarien palatsiksi, ja presidentinlinnaksi se kunnostettiin vuonna 1921."),
+                  checks=[("fi:Presidentinlinna", ["keisarillinen palatsi Helsingissä", "Kauppatorin laidalla",
+                                                   "Pehr Granstedt suunnitteli talon alkujaan 1814",
+                                                   "kauppiastaloksi ja asunnoksi", "Suomen senaatti osti talon vuonna 1837",
+                                                   "Presidentinlinnaksi rakennus kunnostettiin vuonna 1921"])],
+                  clue=archive("hkm.8E8A5479-3ED9-4C04-8E47-241335593A00", 1891)),
+             find("wd:fi:Säätytalo",
+                  T("Built for the three estates without nobility, which had waited for a house of their own. Today "
+                    "governments are negotiated here after elections.",
+                    "Rakennettiin kolmelle aatelittomalle säädylle, jotka olivat odottaneet omia tiloja. Nykyään täällä "
+                    "neuvotellaan hallitus eduskuntavaalien jälkeen."),
+                  [T("It stands on Snellmaninkatu, opposite the Bank of Finland.",
+                     "Se on Snellmaninkadulla vastapäätä Suomen Pankkia.")],
+                  T("The House of the Estates by Gustaf Nyström, inaugurated in January 1891. When the one-chamber "
+                    "parliament replaced the Diet in 1906, it was too small for the plenary sessions.",
+                    "Säätytalo, Gustaf Nyströmin suunnittelema, vihittiin käyttöön tammikuussa 1891. Kun yksikamarinen "
+                    "eduskunta korvasi säätyvaltiopäivät 1906, rakennus oli liian pieni sen täysistunnoille."),
+                  checks=[("fi:Säätytalo", ["Kolme aatelitonta säätyä", "hallitusneuvottelut",
+                                            "Snellmaninkadulla, vastapäätä Suomen Pankkia", "Gustaf Nyströmin suunnittelema",
+                                            "vihittiin käyttöön tammikuussa 1891", "yksikamarinen eduskunta",
+                                            "täysistuntoihin rakennus oli liian pieni"])],
+                  clue=archive("hkm.A7779587-BF2D-43F4-B4DB-924EFAB39C19", 1893)),
          ]),
 ]

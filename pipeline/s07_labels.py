@@ -1,52 +1,23 @@
-"""Street and canal names, placed along their own outlines.
+"""Street names, placed along their own outlines.
 
-Source: BAG openbare ruimtes from the Amsterdam city API (polygon per street, CC0). Each polygon is cut
-into 300 m cells; every piece longer than it is wide gets one label at its centre, turned along its
-long side. Tier 1 (canals and main streets) shows from afar, tier 2 only up close.
+Source: the street areas of Helsinki's register of public areas (YLRE_Katualue_alue, a polygon per stretch of street,
+CC BY 4.0). Each polygon is cut into 300 m cells; every piece longer than it is wide gets one label at its centre,
+turned along its long side. Tier 1 (main streets and motorways, by the register's own class) shows from afar,
+tier 2 only up close. Streets not built yet are left out.
 """
 import json
 import math
 from pathlib import Path
 
+import geopandas as gpd
 import numpy as np
-import requests
 import shapely
-from shapely.geometry import box, shape
+from shapely.geometry import box
 
-from .s03_tiles import DAM
+from .s03_tiles import ORIGIN
 
-API = "https://api.data.amsterdam.nl/v1/bag/openbareruimtes/"
 CELL = 300.0
-TIER1 = {
-    # canals and rivers
-    "Singel", "Herengracht", "Keizersgracht", "Prinsengracht", "Singelgracht", "Amstel", "Brouwersgracht",
-    "Lijnbaansgracht", "Bloemgracht", "Egelantiersgracht", "Leidsegracht", "Reguliersgracht", "Lauriergracht",
-    "Oudezijds Voorburgwal", "Oudezijds Achterburgwal", "Kloveniersburgwal", "Geldersekade", "Groenburgwal",
-    "Nieuwe Herengracht", "Nieuwe Keizersgracht", "Nieuwe Prinsengracht", "Entrepotdok", "Oosterdok",
-    "Westerdok", "Amstelkanaal", "Noordhollandsch Kanaal", "Kostverlorenvaart", "Boerenwetering",
-    "Het IJ", "IJ", "Nieuwe Meer", "Sloterplas", "Rapenburgwal", "Houtkopersburgwal", "Looiersgracht",
-    # main streets and squares
-    "Damrak", "Rokin", "Kalverstraat", "Nieuwendijk", "Dam", "Leidsestraat", "Utrechtsestraat", "Vijzelstraat",
-    "Weesperstraat", "Wibautstraat", "Overtoom", "Ferdinand Bolstraat", "Van Baerlestraat", "Stadhouderskade",
-    "Nassaukade", "Marnixstraat", "Rozengracht", "Raadhuisstraat", "Haarlemmerstraat", "Haarlemmerdijk",
-    "Jodenbreestraat", "Plantage Middenlaan", "Sarphatistraat", "Ceintuurbaan", "Albert Cuypstraat",
-    "De Clercqstraat", "Kinkerstraat", "Prins Hendrikkade", "Zeedijk", "Warmoesstraat", "Spui", "Rembrandtplein",
-    "Leidseplein", "Museumplein", "Beethovenstraat", "Apollolaan", "Amstelveenseweg", "IJburglaan",
-    "Van Woustraat", "Linnaeusstraat", "Middenweg", "Admiraal de Ruijterweg", "Jan Evertsenstraat",
-    "Bos en Lommerweg", "Klaprozenweg", "Johan Huizingalaan", "Europaboulevard", "Bijlmerdreef",
-    "Mr. Visserplein", "Waterlooplein", "Frederiksplein", "Weteringschans", "Mauritskade", "Hobbemakade",
-}
-
-
-def fetch():
-    items, url, params = [], API, {"_format": "json", "_pageSize": 1000}
-    while url:
-        d = requests.get(url, params=params, timeout=120).json()
-        items += d["_embedded"]["openbareruimtes"]
-        url = d["_links"].get("next", {}).get("href")
-        params = None
-    return [o for o in items if o.get("geometrie") and not o.get("eindGeldigheid")
-            and o["typeOmschrijving"] in ("Weg", "Water")]
+TIER1 = {"Pääkatu", "Moottoriväylä"}
 
 
 def pieces(geom):
@@ -72,27 +43,21 @@ def placement(p):
     ang = (ang + 90) % 180 - 90  # keep text upright
     # The piece's width: area over length is the street's mean width, steadier than the rectangle's short side.
     width = p.area / max(np.hypot(*long), 1)
-    return [round(pt.x - DAM[0], 1), round(-(pt.y - DAM[1]), 1), round(ang, 1), round(float(np.hypot(*long))),
+    return [round(pt.x - ORIGIN[0], 1), round(-(pt.y - ORIGIN[1]), 1), round(ang, 1), round(float(np.hypot(*long))),
             round(float(width), 1)]
 
 
 def main():
-    raw = Path("data/raw/openbareruimtes.json")
-    if not raw.exists():
-        raw.write_text(json.dumps(fetch()))
-    items = json.loads(raw.read_text())
+    streets = gpd.read_file("data/raw/YLRE_Katualue_alue.geojson")
+    streets = streets[streets.geometry.notna() & (streets.rakentamisen_tila != "Rakentamaton")]
     labels = []
-    for o in items:
-        g = shapely.make_valid(shape(o["geometrie"] if isinstance(o["geometrie"], dict) else json.loads(o["geometrie"])))
-        pts = [pl for p in pieces(g) if (pl := placement(p))]
-        if not pts:
-            continue
-        name = o["naam"]
-        labels.append(dict(name=name, water=o["typeOmschrijving"] == "Water",
-                           tier=1 if name in TIER1 else 2, pts=pts, origin=o.get("beschrijvingNaam")))
-    # One entry per name: a canal is registered both as water and as the street along it; keep the water.
+    for r in streets.itertuples():
+        pts = [pl for p in pieces(shapely.make_valid(r.geometry)) if (pl := placement(p))]
+        if pts:
+            labels.append(dict(name=r.kadun_nimi, water=False, tier=1 if r.kayttotarkoitus in TIER1 else 2, pts=pts))
+    # One entry per name: a street is registered in many stretches; a name is tier 1 if any stretch is.
     merged = {}
-    for l in sorted(labels, key=lambda l: not l["water"]):
+    for l in sorted(labels, key=lambda l: l["tier"]):
         m = merged.setdefault(l["name"], dict(l, pts=[]))
         m["pts"] += l["pts"]
     labels = []

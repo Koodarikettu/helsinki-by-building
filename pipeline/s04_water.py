@@ -1,4 +1,4 @@
-"""Water (BGT waterdeel) and the city outline, in the viewer's local frame.
+"""Water (sea and inland water) and land (mainland and islands), in the viewer's local frame.
 
 water.bin / land.bin layout (little-endian):
   u32 nPoly, nRing, nVert; u32 ringStart[nPoly+1]; u32 vertStart[nRing+1]; f32 xz[2*nVert]
@@ -9,9 +9,10 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 import shapely
 
-from .s03_tiles import DAM, to_local
+from .s03_tiles import to_local
 
 OUT = Path("web/data")
 
@@ -36,13 +37,12 @@ def pack(geoms) -> bytes:
 
 
 def main():
-    city = gpd.read_file("data/raw/boundary.json").set_crs(28992, allow_override=True).union_all()
-    w = gpd.read_file("data/raw/bgt_waterdeel.geojson").set_crs(28992, allow_override=True)
-    w = w[w.relatieve_hoogteligging == 0]
-    water = shapely.make_valid(w.union_all()).intersection(city)
-    water = water.buffer(0.5).buffer(-0.5).simplify(1.0)
+    # Helsinki's own land/water split: the two never overlap, so no boundary or difference is needed.
+    union = lambda *names: shapely.make_valid(gpd.GeoSeries(pd.concat(
+        [gpd.read_file(f"data/raw/Maavesi_{n}.geojson").geometry for n in names])).union_all())
+    water = union("merialue", "muut_vesialueet").buffer(0.5).buffer(-0.5).simplify(1.0)
     water = [p for p in polygons(water) if p.area > 30]
-    land = city.difference(shapely.MultiPolygon(water)).simplify(1.0)
+    land = union("manner", "saaret").simplify(1.0)
     land = [p for p in polygons(land) if p.area > 30]
     (OUT / "water.bin").write_bytes(pack(water))
     (OUT / "land.bin").write_bytes(pack(land))

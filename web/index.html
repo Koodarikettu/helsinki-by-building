@@ -1,25 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="fi">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>LAYRS: Amsterdam</title>
+<link rel="icon" href="data:,">
+<title>Helsinki, rakennus rakennukselta</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<script src="logo.js" defer></script>
 </head>
 <body>
-<canvas id="scene" aria-label="3D map of Amsterdam's buildings"></canvas>
+<canvas id="scene" aria-label="3D map of Helsinki's buildings"></canvas>
 <div class="veil veil-top" aria-hidden="true"></div>
 <div class="veil veil-bottom" aria-hidden="true"></div>
 
 <header class="masthead">
-  
   <div>
-    <h1><span class="layrs" aria-label="LAYRS">LAYRS</span>Amsterdam<i class="baseline"></i></h1>
-    <p class="dek">Every building standing today, by age and historical context.</p>
+    <h1>Helsinki</h1>
+    <p class="dek">Every building standing today, by the year it was completed.</p>
   </div>
 </header>
 
@@ -27,82 +26,79 @@
   <button data-mode="0" aria-pressed="true">Period</button>
   <button data-mode="3" aria-pressed="false">Context layers</button>
   <button data-mode="1" aria-pressed="false">Floors</button>
-  <button data-mode="2" aria-pressed="false">Energy</button>
+  <button data-mode="2" aria-pressed="false" hidden>Energy</button>
   <button class="quests-open" aria-haspopup="dialog"><svg viewBox="0 0 24 8" aria-hidden="true"><path d="M1 1l6 6M7 1L1 7M9 1l6 6M15 1L9 7M17 1l6 6M23 1l-6 6"/></svg><span>Quests</span></button>
 </nav>
 
 <div class="lang" role="group" aria-label="Language">
   <button class="about-open" aria-haspopup="dialog">About</button>
-  <button data-lang="en" aria-pressed="true">EN</button><button data-lang="nl" aria-pressed="false">NL</button>
+  <button data-lang="fi" aria-pressed="true">FI</button><button data-lang="en" aria-pressed="false">EN</button>
 </div>
 
 <dialog id="about" class="about" aria-labelledby="about-title">
   <button class="about-close" aria-label="Close">×</button>
-  <article lang="en" data-lang-block="en">
+  <article lang="en" data-lang-block="en" hidden>
     <h2 id="about-title">About this map</h2>
-    <p>All 192,000 buildings of Amsterdam, coloured by the year they were built and set in the history that shaped them.</p>
+    <p>All 85,000 buildings in Helsinki, coloured by the year they were completed, with the protection the city's plans give them, the national heritage areas they stand in and what Wikipedia says about them.</p>
     <p class="notice">A non-commercial project, made out of curiosity and for education.</p>
-    <p class="author">Made by <a href="https://www.linkedin.com/in/alexanderbarakov" target="_blank" rel="noopener">Alex Barakov</a>.</p>
-    <p class="credit">Inspired by Sasha Bogachev and his <a href="https://paris.bogachev.fr" target="_blank" rel="noopener">Paris, building by building</a>.</p>
-    <h3>LAYRS projects</h3>
-    <p>LAYRS maps cities building by building: each one with its age and the layers of history it belongs to.</p>
-    <ul>
-      <li><a href="/lab/amsterdam/">LAYRS: Amsterdam</a>, you are here.</li>
-      <li><a href="/lab/delft/">LAYRS: Delft</a>: 37,000 buildings of Delft, from Vermeer's street to the 1654 gunpowder blast.</li>
-      <li><a href="/ru/lab/spb/">LAYRS: St. Petersburg</a>: 107,000 buildings of St. Petersburg, from Pushkin's flats to the 1941 air-raid reports (in Russian).</li>
-    </ul>
-    <h3>Open source</h3>
-    <p>The code and the pipeline are on <a href="https://github.com/alexbarakov/amsterdam-by-building" target="_blank" rel="noopener">GitHub</a>. Know a piece of Amsterdam's history
-    that lives in its buildings? <a href="https://github.com/alexbarakov/amsterdam-by-building/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Add it as a layer</a>:
-    a list of addresses, a short story for each and the Wikipedia article it rests on.</p>
+    <p class="credit">Built on <a href="https://github.com/alexbarakov/amsterdam-by-building" target="_blank" rel="noopener">Amsterdam, building by building</a>
+    by <a href="https://www.linkedin.com/in/alexanderbarakov" target="_blank" rel="noopener">Alexander Barakov</a> (MIT licence), which was inspired by Sasha Bogachev
+    and his <a href="https://paris.bogachev.fr" target="_blank" rel="noopener">Paris, building by building</a>.</p>
     <h3>Data</h3>
-    <p>Downloaded on 12 October 2026; street photos load live.</p>
+    <p>Downloaded on 14 October 2026.</p>
     <ul>
-      <li>Buildings, heights, years: 3D BAG v2025.09.03 (TU Delft) on the Dutch building register BAG. CC BY 4.0.</li>
-      <li>Water, boundary, streets: BGT and BAG via PDOK and the City of Amsterdam. CC0.</li>
-      <li>Monuments, history layers: national monument register (RCE) and City of Amsterdam open data. CC0 or CC BY.</li>
-      <li>Energy labels: RVO via RIVM Atlas Leefomgeving. Public domain.</li>
-      <li>Names, photos, stories: Wikidata, Wikipedia, Wikimedia Commons; each photo credits its author and licence.</li>
-      <li>Street photos: City of Amsterdam panoramas. CC BY 4.0.</li>
-      <li>Archive photos, 1940s–2010s: Stadsarchief Amsterdam beeldbank, linked to buildings by the Amsterdam Time Machine (University of Amsterdam). Shown from the archive's own server; each links to its record, where the rights are stated.</li>
+      <li>Buildings, completion years, floors, use and materials: City of Helsinki, buildings with register data
+        (<a href="https://hri.fi/data/en_GB/dataset/helsingin-rakennukset" target="_blank" rel="noopener">Helsinki Region Infoshare</a>,
+        WFS layer Rakennukset_alue_rekisteritiedot). CC BY 4.0.</li>
+      <li>Land and water: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-maa-ja-vesialueet" target="_blank" rel="noopener">land and water areas</a>. CC BY 4.0.</li>
+      <li>Protected buildings: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa" target="_blank" rel="noopener">buildings and areas protected in local plans</a>. CC BY 4.0.</li>
+      <li>Street names: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-yleisten-alueiden-rekisteri" target="_blank" rel="noopener">register of public areas</a>, maintained by the Urban Environment Division. CC BY 4.0.</li>
+      <li>Heights: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D city model</a>. CC BY 4.0.</li>
+      <li>Data and maps © City of Helsinki, City Survey Services. Use classes: Statistics Finland, Building classification 1994.</li>
+      <li>Nationally significant built environments: Finnish Heritage Agency, <a href="https://www.rky.fi" target="_blank" rel="noopener">RKY</a>. CC BY 4.0.</li>
+      <li>Names, architects, styles: Wikidata, CC0. Article extracts: Wikipedia, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>, shortened and linked to the article. Photos: Wikimedia Commons; each photo credits its author and licence.</li>
+      <li>Archive photos: <a href="https://www.finna.fi" target="_blank" rel="noopener">Helsinki City Museum, via Finna</a>, matched to buildings by the address the museum gives. Public domain (PDM) or CC BY 4.0; each photo names its photographer, links its record and loads from Finna.</li>
     </ul>
     <h3>Method</h3>
-    <p>Placeholder and rounded years in BAG are estimated from dated neighbours; where the monument register dates a building
-    earlier, the register wins. Approximate years are paler and marked “c.”. Every hand-written story is checked against its
-    Wikipedia article; the residents layer is found automatically and may contain errors.</p>
+    <p>About 35,000 buildings, nearly all sheds, storehouses, garages and summer cottages, have no year in the register;
+    a few carry the placeholder 1000. Their year is estimated from the other buildings on the same property, or else
+    from the nearest dated buildings. Before 1930 the register rounds many dates to the decade (1900 appears five times
+    as often as the years around it); the surplus is spread across the decade. Approximate years are paler and marked “c.”.
+    Heights come from the city's 3D city model: the 70th percentile of each building's roof surfaces, so that a tower
+    or a dome does not raise the whole block. Buildings the model does not link, nearly all small outbuildings, are
+    drawn at their number of floors times 3.2 m. Every claim in the quests is checked against its Wikipedia article.</p>
   </article>
-  <article lang="nl" data-lang-block="nl" hidden>
-    <h2>Over deze kaart</h2>
-    <p>Alle 192.000 gebouwen van Amsterdam, gekleurd naar hun bouwjaar en geplaatst in de geschiedenis die ze vormde.</p>
-    <p class="notice">Een niet-commercieel project, gemaakt uit nieuwsgierigheid en voor onderwijs.</p>
-    <p class="author">Gemaakt door <a href="https://www.linkedin.com/in/alexanderbarakov" target="_blank" rel="noopener">Alex Barakov</a>.</p>
-    <p class="credit">Geïnspireerd door Sasha Bogachev en zijn <a href="https://paris.bogachev.fr" target="_blank" rel="noopener">Paris, building by building</a>.</p>
-    <h3>LAYRS-projecten</h3>
-    <p>LAYRS brengt steden gebouw voor gebouw in kaart: elk met zijn leeftijd en de lagen geschiedenis waartoe het behoort.</p>
+  <article lang="fi" data-lang-block="fi">
+    <h2>Tietoa kartasta</h2>
+    <p>Helsingin kaikki 85 000 rakennusta värjättynä valmistumisvuoden mukaan. Mukana on myös asemakaavan suojelu, valtakunnallisesti merkittävät kulttuuriympäristöt ja se, mitä Wikipedia rakennuksista kertoo.</p>
+    <p class="notice">Ei-kaupallinen projekti, tehty uteliaisuudesta ja opetuskäyttöön.</p>
+    <p class="credit">Pohjana on <a href="https://www.linkedin.com/in/alexanderbarakov" target="_blank" rel="noopener">Alexander Barakovin</a>
+    <a href="https://github.com/alexbarakov/amsterdam-by-building" target="_blank" rel="noopener">Amsterdam, building by building</a> (MIT-lisenssi),
+    jonka esikuva on Sasha Bogachevin <a href="https://paris.bogachev.fr" target="_blank" rel="noopener">Paris, building by building</a>.</p>
+    <h3>Aineistot</h3>
+    <p>Ladattu 14.10.2026.</p>
     <ul>
-      <li><a href="/lab/amsterdam/">LAYRS: Amsterdam</a>, hier ben je nu.</li>
-      <li><a href="/lab/delft/">LAYRS: Delft</a>: 37.000 gebouwen van Delft, van Vermeers straatje tot de donderslag van 1654.</li>
-      <li><a href="/ru/lab/spb/">LAYRS: St. Petersburg</a>: 107.000 gebouwen van Sint-Petersburg, van Poesjkins woningen tot de luchtaanvalsrapporten van 1941 (in het Russisch).</li>
+      <li>Rakennukset, valmistumisvuodet, kerrosluvut, käyttötarkoitukset ja materiaalit: Helsingin kaupunki, rakennukset alueina rekisteritiedoin
+        (<a href="https://hri.fi/data/fi/dataset/helsingin-rakennukset" target="_blank" rel="noopener">Helsinki Region Infoshare</a>,
+        WFS-taso Rakennukset_alue_rekisteritiedot). CC BY 4.0.</li>
+      <li>Maa- ja vesialueet: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-maa-ja-vesialueet" target="_blank" rel="noopener">Helsingin maa- ja vesialueet</a>. CC BY 4.0.</li>
+      <li>Suojellut rakennukset: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa" target="_blank" rel="noopener">asemakaavoilla suojellut rakennukset ja alueet</a>. CC BY 4.0.</li>
+      <li>Kadunnimet: <a href="https://hri.fi/data/fi/dataset/helsingin-kaupungin-yleisten-alueiden-rekisteri" target="_blank" rel="noopener">Helsingin kaupungin yleisten alueiden rekisteri</a>. Aineiston ylläpitäjä on Helsingin kaupungin kaupunkiympäristön toimiala. CC BY 4.0.</li>
+      <li>Korkeudet: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D-kaupunkimalli</a>. CC BY 4.0.</li>
+      <li>Data ja kartat © Helsingin kaupunki, kaupunkimittauspalvelut. Käyttötarkoitusluokat: Tilastokeskus, Rakennusluokitus 1994.</li>
+      <li>Valtakunnallisesti merkittävät rakennetut kulttuuriympäristöt: Museovirasto, <a href="https://www.rky.fi" target="_blank" rel="noopener">RKY</a>. CC BY 4.0.</li>
+      <li>Nimet, arkkitehdit ja tyylit: Wikidata, CC0. Artikkeliotteet: Wikipedia, <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.fi" target="_blank" rel="noopener">CC BY-SA 4.0</a>, lyhennettyinä ja linkitettyinä artikkeliin. Kuvat: Wikimedia Commons; jokaisen kuvan tekijä ja lisenssi näkyvät kuvan yhteydessä.</li>
+      <li>Arkistokuvat: <a href="https://www.finna.fi" target="_blank" rel="noopener">Helsingin kaupunginmuseo, Finna</a>, liitetty rakennuksiin museon antaman osoitteen perusteella. Tekijänoikeudeton (PDM) tai CC BY 4.0; jokaisen kuvan kuvaaja ja lisenssi näkyvät, kuva linkittyy Finnan tietueeseen ja latautuu Finnasta.</li>
     </ul>
-    <h3>Open source</h3>
-    <p>De code en de pijplijn staan op <a href="https://github.com/alexbarakov/amsterdam-by-building" target="_blank" rel="noopener">GitHub</a>. Ken je een stuk Amsterdamse geschiedenis
-    dat in de gebouwen zit? <a href="https://github.com/alexbarakov/amsterdam-by-building/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Voeg het toe als laag</a>:
-    een lijst adressen, bij elk een kort verhaal en het Wikipedia-artikel waarop het rust.</p>
-    <h3>Gegevens</h3>
-    <p>Gedownload op 12 oktober 2026; straatbeelden worden live geladen.</p>
-    <ul>
-      <li>Gebouwen, hoogtes, bouwjaren: 3D BAG v2025.09.03 (TU Delft) op basis van de BAG. CC BY 4.0.</li>
-      <li>Water, grens, straten: BGT en BAG via PDOK en de gemeente Amsterdam. CC0.</li>
-      <li>Monumenten, historische lagen: rijksmonumentenregister (RCE) en open data van de gemeente Amsterdam. CC0 of CC BY.</li>
-      <li>Energielabels: RVO via de Atlas Leefomgeving van het RIVM. Publiek domein.</li>
-      <li>Namen, foto's, verhalen: Wikidata, Wikipedia, Wikimedia Commons; bij elke foto staan maker en licentie.</li>
-      <li>Straatbeelden: panorama's van de gemeente Amsterdam. CC BY 4.0.</li>
-      <li>Archieffoto's, jaren 1940–2010: beeldbank van het Stadsarchief Amsterdam, aan gebouwen gekoppeld door de Amsterdam Time Machine (Universiteit van Amsterdam). Getoond vanaf de server van het archief; elke foto linkt naar de beschrijving, met de rechten.</li>
-    </ul>
-    <h3>Methode</h3>
-    <p>Plaatshouders en afgeronde jaartallen in de BAG zijn geschat uit gedateerde buren; waar het monumentenregister een gebouw
-    eerder dateert, wint het register. Geschatte jaren zijn lichter en gemarkeerd met “c.”. Elk zelfgeschreven verhaal is
-    gecontroleerd aan zijn Wikipedia-artikel; de laag met bewoners is automatisch gevonden en kan fouten bevatten.</p>
+    <h3>Menetelmä</h3>
+    <p>Noin 35 000 rakennukselta puuttuu rekisteristä valmistumisvuosi. Ne ovat lähes kaikki vajoja, varastoja, autotalleja
+    ja kesämökkejä. Muutamalla vuosi on paikkamerkki 1000. Niiden vuosi on arvioitu saman kiinteistön muista rakennuksista
+    tai, jos niitä ei ole, lähimmistä rakennuksista, joilla vuosi on. Ennen vuotta 1930 rekisteri pyöristää monet vuodet
+    tasakymmeniin (1900 esiintyy viisi kertaa niin usein kuin ympäröivät vuodet), ja ylimäärä on levitetty vuosikymmenelle.
+    Arvioidut vuodet näkyvät haaleampina ja merkinnällä ”n.”. Korkeudet ovat kaupungin 3D-kaupunkimallista: rakennuksen
+    kattopintojen korkeuden 70. persentiili, jottei torni tai kupoli nosta koko rakennusta. Rakennukset, joita malli ei
+    yhdistä, lähes kaikki pieniä talousrakennuksia, piirretään kerrosluku kertaa 3,2 m korkuisina. Jokainen visailujen
+    väite on tarkistettu Wikipedia-artikkelista.</p>
   </article>
 </dialog>
 
