@@ -1,10 +1,20 @@
 # Helsinki, building by building
 
-Every building in Helsinki, 85,000 of them, coloured by the year it was completed, with the protection the city's
-plans give it, the national heritage areas it stands in and what Wikidata and Wikipedia say about it. Back in time,
-the 4,800 buildings demolished since 2008 stand again, and the city's old maps and aerial photos can lie under them.
-The Energy colouring shows energy labels and how much solar power each roof could give, and the card tells why the
-building's street is so named.
+Every building in Helsinki, 85,000 of them, coloured by the year it was completed. What the map shows:
+
+- **Colourings.** By the period a building was completed, by its floors, by its energy label, or by how much solar
+  power its roof could give.
+- **Back in time.** The timeline plays the city's growth. Go back and the 4,800 buildings demolished since 2008 stand
+  again, paler, and the city's old maps (1749–1925) and aerial photos (1932–2025) can lie under them.
+- **Context layers.** The protection the city's plans give a building, the national heritage areas (RKY) it stands
+  in, and the buildings in Wikipedia.
+- **The building's card.** Use, height, floors, structure and facade, architect and style, the Wikipedia extract,
+  the City Museum's photos of it through the years, its energy label and solar potential, and why its street is so
+  named.
+- **Aerial view.** The city's photogrammetric 3D model from its 2017 or 2024 aerial photos, in the same scene.
+- **Street names.** The streets laid on the ground and the buildings faded: streets that once had another name are
+  blue, and a click on one gives its former names and the history they were read from.
+- **Quests.** Find buildings from riddles and old photos, and guess their age with the colours switched off.
 
 A non-commercial project, made for curiosity and learning. It is a fork of Alexander Barakov's
 [Amsterdam, building by building](https://github.com/alexbarakov/amsterdam-by-building) (MIT), which was inspired by
@@ -17,8 +27,18 @@ three.js city, follows theirs. The viewer in `web/` is Amsterdam's, with Helsink
 |---|---|---|
 | ![The Government Palace card with C.A. Hårdh's photo from 1866](docs/screenshots/archive.jpg) | ![Buildings protected in local plans, by marking](docs/screenshots/protected.jpg) | ![A solved quest step: Kaivohuone in 1870 and today](docs/screenshots/quest.jpg) |
 
-Screenshots of the map, which uses CC BY 4.0 data © City of Helsinki. They show photos by C.A. Hårdh (Helsinki City
-Museum, public domain) and, in the quest, Kaivohuone today by
+| Aerial view: the city's 3D model from its 2024 aerial photos | Back to 2017: Pasila on that year's aerial photo, Tripla still a building site | Street names: the former names of Pohjoisesplanadi |
+|---|---|---|
+| ![The Market Square and the Cathedral in the 2024 photogrammetric mesh](docs/screenshots/aerial.jpg) | ![Pasila in 2017 on the aerial photo of that year: Tripla's site still a pit, and the buildings demolished since standing pale](docs/screenshots/demolished.jpg) | ![The Street names view: streets with a former name in blue, Pohjoisesplanadi's card](docs/screenshots/streets.jpg) |
+
+| Energy labels | Solar potential of the roofs | Old maps: the city of 1909 |
+|---|---|---|
+| ![Buildings coloured by their energy label](docs/screenshots/energy.jpg) | ![Buildings coloured by the solar power their roofs could give](docs/screenshots/solar.jpg) | ![The buildings standing in 1909 on the city map of 1909](docs/screenshots/oldmap.jpg) |
+
+Screenshots of the map, which uses CC BY 4.0 data © City of Helsinki (buildings, the 3D model and its aerial meshes,
+aerial photos, old maps, street areas and place names) and © HSY (solar potential), and the public energy
+certificates of Varke's register. They show photos by C.A. Hårdh (Helsinki City Museum, public domain) and, in the
+quest, Kaivohuone today by
 [Marit Henriksson](https://commons.wikimedia.org/wiki/File:Kaivohuone_A_-Marit_Henriksson.jpg) (CC BY-SA 4.0).
 
 ## How it works
