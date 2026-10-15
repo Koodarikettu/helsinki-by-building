@@ -36,7 +36,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 | `s04_water` | Water and land polygons |
 | `s05_layers` | Context layers: protected in the local plan, RKY areas, buildings in Wikipedia; a bit per group per building |
 | `s06_wiki` | Names, architects, styles, Wikipedia extracts and Commons photos for buildings with a Wikidata item |
-| `s07_labels` | Street names placed along their street areas, and why each street in an address is so named |
+| `s07_labels` | Street names placed along their street areas; why each street is so named and its former names; the street areas for the Street names view |
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 | `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
@@ -46,7 +46,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 ```bash
 uv sync
 for s in s00_fetch s01_load s02_attributes s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels; do uv run python -m pipeline.$s; done
-uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10   # years, addresses, energy
+uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10   # years, street names, addresses, energy
 python3 -m http.server 8642 --directory web
 ```
 
@@ -96,8 +96,18 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
 - **Street names.** From the street areas of the register of public areas, placed as in Amsterdam: tier 1 (shown from
   afar) is the register's own class for main streets and motorways; streets not yet built are left out. Why a street
   is so named comes from the city's place-name register (`Nimisto_piste_rekisteritiedot`): its reason for the name
-  and, for many, an older history of it, in Finnish only. 2,936 of the 3,620 streets in the buildings' addresses have
-  one; a pinned card shows it for the street of the building's address.
+  and, for many, an older history of it, in Finnish only. 3,565 of the streets in the buildings' addresses or the
+  street areas have one; a pinned card shows it for the street of the building's address.
+- **Former street names.** The register keeps no earlier names as records of their own; they live only in its
+  histories, mixed with proposals never adopted and with other streets' names. They were read out of the 3,560
+  histories once by a language model (Claude), told to keep only names this street itself carried, never a proposal,
+  a draft plan's name or another street's, and kept in `pipeline/former_names.json`: 1,069 names for 562 streets and
+  places, with when the text says each was used. Cases the reading itself flagged as unsure were left out, as were
+  forms that differ from today's name only by spaces or capitals (Freds Gatan for Fredsgatan); Hämeentie was corrected
+  by hand, since its history begins with the old Tavastgatan on today's Snellmaninkatu. `s07_labels` keeps a name only
+  while it stands word for word in its street's text, so a name read wrong cannot be one the text does not contain.
+  The Street names view lays the 7,270 street areas on the ground, the 488 streets with a former name in blue; a click
+  on a street opens its names, its reason and the full history they were read from.
 - **Energy labels.** Varke's energy certificate register publishes every certificate in force as one CSV
   (146,383 in Finland); those of houses with one or two homes are not public. Matched by VTJ-PRT: 14,987 buildings,
   the one signed last where a building has several. The register offers the file for anyone to download but states no
@@ -141,7 +151,9 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   it within 7 cm of ETRS-GK25 across the city; each tile is then stood upright and lifted by the earth's curvature
   (10 m at Vuosaari), so the sea reads 0 m in the centre and in Vuosaari alike. The 2024 mesh's heights are N2000
   already; 2017's are above the ellipsoid and are dropped by the geoid's 17.6 m, after which the two meshes agree to
-  0.1 m in the centre and in Vuosaari. 2015's mesh is glTF 1.0, which three.js no longer reads, so it is not offered.
+  0.1 m in the centre and in Vuosaari. 2017's tiles state a tenth of the geometric error 2024's do for the same
+  size of photo pixel, so it is refined to a screen error of 1.6 px instead of the default 16, which loads the two at
+  the same sharpness and about the same memory. 2015's mesh is glTF 1.0, which three.js no longer reads, so it is not offered.
   A click finds the point it hits in the mesh and the building whose block stands under it.
 - **Known differences.** Checked against five landmarks: the Cathedral (registered as Hallituskatu 7) 1852, the
   Sederholm house 1757, Kiasma 1998 and Oodi 2018 are right; the Railway Station gives 1909 (completed 1919).
@@ -183,7 +195,8 @@ Data keeps the licence of its source:
   [Helsingin historialliset kartat](https://hri.fi/data/fi/collection/helsingin-historialliset-kartat), WMS layers
   `avoindata:Ortoilmakuva_*` and the maps named in `web/app.js`, streamed from the city's map server. CC BY 4.0.
 - Why streets are so named: City of Helsinki, [Helsingin nimistö](https://hri.fi/data/fi/dataset/helsingin-nimisto),
-  WFS layer `Nimisto_piste_rekisteritiedot`. CC BY 4.0.
+  WFS layer `Nimisto_piste_rekisteritiedot`. CC BY 4.0. `pipeline/former_names.json` is read out of its histories and
+  shares its licence.
 - Energy labels: Varke (Valtion tukeman asuntorakentamisen keskus), the public CSV of the
   [energy certificate register](https://www.energiatodistusrekisteri.fi/), downloaded on 14 October 2026. No licence stated.
 - Solar potential: HSY, [Pääkaupunkiseudun aurinkosähköpotentiaali](https://hri.fi/data/fi/dataset/paakaupunkiseudun-aurinkosahkopotentiaali),

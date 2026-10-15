@@ -5,8 +5,13 @@ CC BY 4.0). Each polygon is cut into 300 m cells; every piece longer than it is 
 turned along its long side. Tier 1 (main streets and motorways, by the register's own class) shows from afar,
 tier 2 only up close. Streets not built yet are left out.
 
-Also why each street in an address got its name, for the building card: the city's place-name register
-(Nimisto_piste_rekisteritiedot, CC BY 4.0) gives the reason, and for many an older history of the name, in Finnish.
+Also why each street got its name, for the cards: the city's place-name register (Nimisto_piste_rekisteritiedot,
+CC BY 4.0) gives the reason, and for many an older history of the name, in Finnish. The register keeps no earlier
+names of its own; former_names.json holds those its histories give, read out of them once by a language model (Claude),
+and a name is kept only while it still stands word for word in its street's text.
+
+The street areas themselves go to the map's street-name view (streetmap.bin, laid out as s04_water's; streetmap.json
+names each polygon), those with a former name first.
 """
 import json
 import math
@@ -19,7 +24,9 @@ import shapely
 from shapely.geometry import box
 
 from .s03_tiles import ORIGIN
+from .s04_water import pack, polygons
 
+OUT = Path("web/data")
 CELL = 300.0
 TIER1 = {"Pääkatu", "Moottoriväylä"}
 
@@ -51,22 +58,49 @@ def placement(p):
             round(float(width), 1)]
 
 
-def origins() -> dict:
-    """{street name: [why it was given, its history]} for the streets in the buildings' addresses."""
-    names = set(pd.read_parquet("data/buildings.parquet", columns=["katunimi_suomi"]).katunimi_suomi.dropna())
+def former(names: dict, text: dict) -> dict:
+    """The former names that still stand word for word in their street's text: {street: [[name, when], ...]}."""
+    return {k: kept for k, v in names.items() if (kept := [n for n in v if n[0] in text.get(k, "")])}
+
+
+def origins(names: set) -> dict:
+    """{street: [why it was given, its history, its former names, its Swedish name]} for the given streets."""
     n = gpd.read_file("data/raw/Nimisto_piste_rekisteritiedot.geojson")
     n = n[n.nimi_suomi.isin(names) & (n.nimeamisperuste.notna() | n.lisatieto.notna())]
     n = n.sort_values("laji_selite", key=lambda s: s != "Katu").drop_duplicates("nimi_suomi")  # a street before a park
-    n = n.fillna({"nimeamisperuste": "", "lisatieto": ""})
-    return {r.nimi_suomi: [r.nimeamisperuste.strip(), r.lisatieto.strip()] for r in n.itertuples()}
+    n = n.fillna({"nimeamisperuste": "", "lisatieto": "", "nimi_ruotsi": ""})
+    old = former(json.loads((Path(__file__).parent / "former_names.json").read_text()),
+                 {r.nimi_suomi: r.nimeamisperuste + " " + r.lisatieto for r in n.itertuples()})
+    return {r.nimi_suomi: [r.nimeamisperuste.strip(), r.lisatieto.strip(), old.get(r.nimi_suomi, []), r.nimi_ruotsi]
+            for r in n.itertuples()}
+
+
+def streetmap(streets: gpd.GeoDataFrame, old: set):
+    """The street areas for the street-name view, those with a former name first."""
+    polys, of = [], []
+    names = sorted(set(streets.kadun_nimi), key=lambda k: (k not in old, k))
+    index = {k: i for i, k in enumerate(names)}
+    for r in sorted(streets.itertuples(), key=lambda r: index[r.kadun_nimi]):
+        for p in polygons(shapely.make_valid(r.geometry).simplify(0.3)):
+            if p.area > 1:
+                polys.append(p)
+                of.append(index[r.kadun_nimi])
+    (OUT / "streetmap.bin").write_bytes(pack(polys))
+    (OUT / "streetmap.json").write_text(json.dumps({"names": names, "of": of, "old": sum(names[i] in old for i in of)},
+                                                   ensure_ascii=False, separators=(",", ":")))
+    print(len(polys), "street areas,", sum(k in old for k in names), "of", len(names), "streets with a former name;",
+          (OUT / "streetmap.bin").stat().st_size // 1024, "KB")
 
 
 def main():
-    names = origins()
-    Path("web/data/streets.json").write_text(json.dumps(names, ensure_ascii=False, separators=(",", ":")))
-    print(len(names), "street names explained;", Path("web/data/streets.json").stat().st_size // 1024, "KB")
     streets = gpd.read_file("data/raw/YLRE_Katualue_alue.geojson")
     streets = streets[streets.geometry.notna() & (streets.rakentamisen_tila != "Rakentamaton")]
+    addresses = set(pd.read_parquet("data/buildings.parquet", columns=["katunimi_suomi"]).katunimi_suomi.dropna())
+    names = origins(addresses | set(streets.kadun_nimi))
+    (OUT / "streets.json").write_text(json.dumps(names, ensure_ascii=False, separators=(",", ":")))
+    print(len(names), "street names explained,", sum(bool(v[2]) for v in names.values()), "with former names;",
+          (OUT / "streets.json").stat().st_size // 1024, "KB")
+    streetmap(streets, {k for k, v in names.items() if v[2]})
     labels = []
     for r in streets.itertuples():
         pts = [pl for p in pieces(shapely.make_valid(r.geometry)) if (pl := placement(p))]
@@ -86,9 +120,9 @@ def main():
                 kept.append(p)
         m["pts"] = kept
         labels.append(m)
-    Path("web/data/labels.json").write_text(json.dumps(labels, ensure_ascii=False, separators=(",", ":")))
+    (OUT / "labels.json").write_text(json.dumps(labels, ensure_ascii=False, separators=(",", ":")))
     print(len(labels), "names,", sum(len(l["pts"]) for l in labels), "placements,",
-          sum(l["tier"] == 1 for l in labels), "tier 1;", Path("web/data/labels.json").stat().st_size // 1024, "KB")
+          sum(l["tier"] == 1 for l in labels), "tier 1;", (OUT / "labels.json").stat().st_size // 1024, "KB")
 
 
 if __name__ == "__main__":

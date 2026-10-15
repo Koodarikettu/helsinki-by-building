@@ -153,6 +153,9 @@ h1 { margin: 0; font-size: clamp(34px, 4.4vw, 56px); font-weight: 800; letter-sp
 .card .why { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .card .sources p { margin: 0; }
 .card .naming .why { white-space: pre-line; }
+.card-head .sv { margin: 0; color: var(--muted); }
+.card .former { list-style: none; margin: 0 0 6px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.card .former span { color: var(--muted); }
 .card .naming summary { cursor: pointer; margin-top: 6px; font-size: 12px; }
 .card .elabel { color: #fff; font-weight: 700; padding: 1px 7px; border-radius: 3px; }
 .card .residents { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -183,6 +186,9 @@ body.photo .panel, body.photo .timeline, body.photo .tally, body.questing .photo
   font-size: 12px; font-weight: 600; color: var(--muted); }
 .ground button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 #ground-src { font-size: 12px; color: var(--muted); }
+#streets-key { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+#streets-key[hidden] { display: none; }
+#streets-key i { width: 10px; height: 10px; border-radius: 2px; background: #3d7fd9; }
 body.photo .ground, body.questing .ground { display: none; }
 /* The aerial view's years, where the timeline would be. */
 .photo-years { display: none; position: fixed; left: 50%; transform: translateX(-50%);

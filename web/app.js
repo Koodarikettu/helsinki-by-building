@@ -95,6 +95,9 @@ const FI_UI = {
   'Energy label': 'Energialuokka', 'Solar potential': 'Aurinkosähköpotentiaali', 'no suitable roof': 'ei sopivaa kattoa',
   'Street name, in Finnish': 'Kadun nimi', 'History of the name': 'Nimen historia', 'Energy certificate register': 'Energiatodistusrekisteri',
   'HSY solar potential': 'HSY:n aurinkosähköpotentiaali', 'Helsinki place names': 'Helsingin nimistö', 'MWh a year': 'MWh vuodessa',
+  'Street names': 'Kadunnimet', 'Earlier name known': 'Aiempi nimi tiedossa', 'Earlier names': 'Aiemmat nimet',
+  'Named after, in Finnish': 'Nimen peruste', 'The place-name register gives no explanation.': 'Nimistörekisterissä ei ole selitystä.',
+  'Read out of the history of the name in the place-name register.': 'Poimittu nimistörekisterin nimen historiasta.',
   'Demolished': 'Purettu', 'Demolished building': 'Purettu rakennus', 'Helsinki 3D city model': 'Helsingin 3D-kaupunkimalli',
   'The 3D city model gives no year. Estimated from the nearest dated buildings, before the year it was demolished.': '3D-kaupunkimallissa ei ole vuotta. Arvioitu lähimpien rakennusten vuosista, ennen purkuvuotta.',
   'Click for the story and sources': 'Napsauta: tarina ja lähteet', 'Click to keep this card open': 'Napsauta pitääksesi kortin auki',
@@ -485,9 +488,11 @@ function pick(x, y) {
 // [tileset, metres to drop it by]: 2024's heights are N2000 written as heights above the ellipsoid (the sea reads
 // 0.2–0.4 m); 2017's are true heights above the ellipsoid, 17.6 m higher (the geoid): dropped by that, the two
 // meshes meet to within 0.1 m by the cathedral and in Vuosaari, 11 km apart.
+// Then the screen error to refine past: 2017's tiles give errors a tenth of 2024's for the same size of photo pixel
+// (0.25 m for 0.12 m pixels, 3.3 m for 0.21 m), so it stopped three levels coarse under the default 16.
 const PHOTOS = {
-  2017: ['https://kartta.hel.fi/3d/mesh/Helsinki_2017/tileset.json', 17.6],
-  2024: ['https://kartta.hel.fi/3d/mesh/Helsinki_2024/2/tileset.json', 0],  // 1/ is an untextured floor
+  2017: ['https://kartta.hel.fi/3d/mesh/Helsinki_2017/tileset.json', 17.6, 1.6],
+  2024: ['https://kartta.hel.fi/3d/mesh/Helsinki_2024/2/tileset.json', 0, 16],  // 1/ is an untextured floor
 };
 const DEG = THREE.MathUtils.DEG2RAD;
 let photo = null, photoLoad = null, photoOn = false, photoYear = 2024;
@@ -497,7 +502,8 @@ async function loadPhoto() {
     import('three/addons/loaders/GLTFLoader.js'),
     import('three/addons/loaders/DRACOLoader.js'),
   ]);
-  const [url, geoid] = PHOTOS[photoYear], tiles = new TilesRenderer(url);
+  const [url, geoid, errorTarget] = PHOTOS[photoYear], tiles = new TilesRenderer(url);
+  tiles.errorTarget = errorTarget;
   const draco = new DRACOLoader().setDecoderPath('vendor/three-addons/libs/draco/');
   tiles.manager.addHandler(/\.gltf$/, new GLTFLoader(tiles.manager).setDRACOLoader(draco));  // b3dm tiles, Draco-packed
   // Globe to map: east, up and south at Senaatintori, turned by the meridian convergence so that x and z follow the
@@ -658,6 +664,79 @@ groundBtn.onclick = () => setGround(!groundOn);
 function drawGroundCaption() {
   const g = groundOn && groundAt(uniforms.uYear.value);
   document.getElementById('ground-src').textContent = g ? `${t(g[1].startsWith('Orto') ? 'Aerial photo' : 'Map')} ${g[0]}` : '';
+}
+
+// ---------- Street names, then and now ----------
+// The city's street areas on the ground, switched on with a button (pipeline/s07_labels.py, streetmap.*): blue where
+// the place-name register's history gives the street a former name. A click on a street opens its names; a click that
+// lands on a building still opens the building.
+const STREET_COLORS = ['#3d7fd9', '#d3d0c6'];  // with a former name, without
+let streetMap = null, streetLoad = null, streetsOn = false, pinnedStreet = null;
+async function loadStreets() {
+  const [geo, meta] = await Promise.all([loadPolygons('data/streetmap.bin'), fetch('data/streetmap.json').then(r => r.json())]);
+  // ShapeGeometry gives a group per polygon: kept to find the clicked one, and drawn as two, those with a former
+  // name (the first meta.old polygons) and the rest.
+  const polys = geo.groups.slice(), split = polys[meta.old]?.start ?? geo.index.count;
+  geo.clearGroups();
+  geo.addGroup(0, split, 0);
+  geo.addGroup(split, geo.index.count - split, 1);
+  const mat = color => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false });
+  const mesh = new THREE.Mesh(geo, STREET_COLORS.map(mat));
+  const picked = new THREE.Mesh(new THREE.BufferGeometry().setAttribute('position', geo.attributes.position), mat('#163a7a'));
+  mesh.position.y = 0.15;
+  picked.position.y = 0.2;
+  picked.visible = false;
+  flat.add(mesh, picked);
+  return streetMap = { ...meta, polys, mesh, picked };
+}
+const streetsBtn = document.getElementById('streets');
+function setStreets(on) {
+  streetsOn = on;
+  streetsBtn.setAttribute('aria-pressed', on);
+  document.getElementById('streets-key').hidden = !on;
+  if (!on && pinnedStreet) pinCard(-1);
+  if (on || streetLoad) (streetLoad ??= loadStreets()).then(s => { s.mesh.visible = streetsOn; });
+}
+streetsBtn.onclick = () => setStreets(!streetsOn);
+function pickStreet(x, y) {
+  if (!streetsOn || !streetMap) return null;
+  ray.setFromCamera(new THREE.Vector2(x / canvas.clientWidth * 2 - 1, 1 - y / canvas.clientHeight * 2), camera);
+  const hit = ray.intersectObject(streetMap.mesh, false)[0];
+  if (!hit) return null;
+  const i = hit.faceIndex * 3, ps = streetMap.polys;
+  let lo = 0, hi = ps.length - 1;  // the last polygon starting at or before the hit triangle
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (ps[m].start <= i) lo = m; else hi = m - 1; }
+  return streetMap.names[streetMap.of[lo]];
+}
+// Its former names first, then why it is so named and the full history they were read from.
+function streetHtml(name) {
+  const [why, story, former = [], sv] = streetNames[name] || [];
+  return `<button class="card-close" aria-label="Close">×</button>
+    <header class="card-head"><h3>${esc(name)}</h3>${sv ? `<p class="sv" lang="sv">${esc(sv)}</p>` : ''}</header>
+    ${former.length ? `<section><h4>${t('Earlier names')}</h4><ul class="former" lang="fi">${former.map(([n, w]) =>
+      `<li><b>${esc(n)}</b>${w ? ` <span>${esc(w)}</span>` : ''}</li>`).join('')}</ul>
+      <p class="why">${t('Read out of the history of the name in the place-name register.')}</p></section>` : ''}
+    <section class="naming">${why || story ? `<h4>${t(why ? 'Named after, in Finnish' : 'History of the name')}</h4><p class="why" lang="fi">${esc(why || story)}</p>
+      ${why && story ? `<details${former.length ? '' : ' open'}><summary>${t('History of the name')}</summary><p class="why" lang="fi">${esc(story)}</p></details>` : ''}`
+      : `<p class="why">${t('The place-name register gives no explanation.')}</p>`}</section>
+    <section class="sources"><h4>${t('Read more')}</h4><p>${link(NAMES_URL(), t('Helsinki place names'))}, CC BY 4.0</p></section>`;
+}
+function pinStreet(name, x, y) {
+  pinCard(-1);
+  pinnedStreet = name;
+  // The street's own polygons, drawn darker over the rest.
+  const k = streetMap.names.indexOf(name), idx = streetMap.mesh.geometry.index.array, sel = [];
+  streetMap.of.forEach((n, p) => { if (n === k) for (let i = streetMap.polys[p].start, e = i + streetMap.polys[p].count; i < e; i++) sel.push(idx[i]); });
+  streetMap.picked.geometry.setIndex(sel);
+  streetMap.picked.visible = true;
+  card.innerHTML = streetHtml(name);
+  card.classList.add('pinned');
+  card.hidden = false;
+  lastPin = [x, y];
+  collapsePanelOnPhone();
+  card.querySelector('.card-close').onclick = () => pinCard(-1);
+  card.querySelector('details')?.addEventListener('toggle', () => placeCard(x, y));
+  placeCard(x, y);
 }
 
 // ---------- Building lookup ----------
@@ -850,6 +929,7 @@ function cardHtml(gid, pinned) {
   // Why the street of its address is so named, in Finnish: the reason first, the older history folded under it.
   const street = b.addr.replace(/\s+\d.*$/, ''), named = pinned && streetNames[street];
   const naming = named && `<section class="naming"><h4>${t('Street name, in Finnish')}</h4><p class="why" lang="fi"><b>${esc(street)}.</b> ${esc(named[0] || named[1])}</p>
+    ${named[2]?.length ? `<p class="why"><b>${t('Earlier names')}:</b> <span lang="fi">${named[2].map(([n, w]) => esc(n) + (w ? ` (${esc(w)})` : '')).join(', ')}</span></p>` : ''}
     ${named[0] && named[1] ? `<details><summary>${t('History of the name')}</summary><p class="why" lang="fi">${esc(named[1])}</p></details>` : ''}</section>`;
   const credit = im && (pinned
     ? `${link(im.page || im.thumb, im.artist || 'Wikimedia Commons')}${im.license ? `, ${im.licenseUrl ? link(im.licenseUrl, im.license) : esc(im.license)}` : ''}`
@@ -907,7 +987,7 @@ function placeCard(x, y) {
 }
 let hoverGid = -1;
 function showCard(gid, x, y) {
-  if (pinnedGid >= 0 || phone.matches) return;
+  if (pinnedGid >= 0 || pinnedStreet || phone.matches) return;
   if (cardsLocked()) { card.hidden = true; return; }
   if (gid < 0) { card.hidden = true; hoverGid = -1; return; }
   if (gid !== hoverGid || card.hidden) {
@@ -924,6 +1004,8 @@ function showCard(gid, x, y) {
 }
 function pinCard(gid, x, y) {
   pinnedGid = gid;
+  pinnedStreet = null;
+  if (streetMap) streetMap.picked.visible = false;
   hoverGid = -1;
   uniforms.uSelected.value = gid;
   if (gid < 0) { card.hidden = true; card.classList.remove('pinned'); return; }
@@ -946,7 +1028,7 @@ let pointer = null, dragging = false, downAt = null;
 canvas.addEventListener('pointermove', e => { pointer = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerdown', e => {
   dragging = true; downAt = [e.clientX, e.clientY];
-  if (pinnedGid < 0) card.hidden = true;
+  if (pinnedGid < 0 && !pinnedStreet) card.hidden = true;
 });
 canvas.addEventListener('pointerup', e => {
   dragging = false;
@@ -954,9 +1036,11 @@ canvas.addEventListener('pointerup', e => {
   const gid = photoOn ? pickPhoto(e.clientX, e.clientY) : pick(e.clientX, e.clientY);
   if (quest && !solved && qStep().kind === 'find') { questClick(gid); return; }
   if (cardsLocked()) return;
+  const street = gid < 0 && pickStreet(e.clientX, e.clientY);
+  if (street) return street === pinnedStreet ? pinCard(-1) : pinStreet(street, e.clientX, e.clientY);
   pinCard(gid === pinnedGid ? -1 : gid, e.clientX, e.clientY);
 });
-canvas.addEventListener('pointerleave', () => { pointer = null; if (pinnedGid < 0) card.hidden = true; uniforms.uHover.value = -1; });
+canvas.addEventListener('pointerleave', () => { pointer = null; if (pinnedGid < 0 && !pinnedStreet) card.hidden = true; uniforms.uHover.value = -1; });
 
 // ---------- Flying to a building ----------
 let bagIndex = null;
@@ -1566,6 +1650,8 @@ function applyStaticText() {
   document.querySelector('.quests-open span').textContent = t('Quests');
   document.querySelector('.photo-mode').textContent = t('Aerial');
   groundBtn.textContent = t('Old maps');
+  streetsBtn.textContent = t('Street names');
+  document.querySelector('#streets-key span').textContent = t('Earlier name known');
   document.querySelector('.photo-years').setAttribute('aria-label', t('Year of the aerial photos'));
   drawGroundCaption();
   document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t('buildings');
@@ -1587,6 +1673,7 @@ function setLang(l) {
   const u = new URL(location.href); u.searchParams.set('lang', l); history.replaceState(null, '', u);
   applyStaticText(); renderPanel(); drawHist();
   if (pinnedGid >= 0) pinCard(pinnedGid, ...lastPin);
+  else if (pinnedStreet) pinStreet(pinnedStreet, ...lastPin);
   if (quest && !questEl.hidden && !questEl.classList.contains('done')) renderQuest();
   if (questsDlg.open) renderQuestList();
 }
@@ -1628,4 +1715,4 @@ renderer.setAnimationLoop(now => {
 });
 
 
-window.__dbg = { pick, pickPhoto, setPhoto, get photo() { return photo; }, uniforms, camera, controls, setLayer, layers, pinCard, showCard, building, labelGroup, labels, flyTo, startPlay, gidOf, questClick, startQuest, get quests() { return quests; } };
+window.__dbg = { renderer, pick, pickPhoto, setPhoto, get photo() { return photo; }, pickStreet, setStreets, get streetMap() { return streetMap; }, uniforms, camera, controls, setLayer, layers, pinCard, showCard, building, labelGroup, labels, flyTo, startPlay, gidOf, questClick, startQuest, get quests() { return quests; } };
