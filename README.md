@@ -6,7 +6,7 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   power its roof could give.
 - **Back in time.** The timeline plays the city's growth. Go back and the 4,800 buildings demolished since 2008 stand
   again, paler; the Torn down view shows them all at once in the colour of their age. The city's old maps
-  (1749–1999) and aerial photos (1932–2025) can lie under the buildings, or be seen alone with the buildings hidden.
+  (1749 to today) and aerial photos (1932–2025) can lie under the buildings, or be seen alone with the buildings hidden.
 - **What Helsinki was meant to become.** The city's master plans and their proposals from 1923 to 2016 on the ground,
   and its road traffic noise as surveyed in 2012, 2017 and 2022.
 - **Context layers.** The protection the city's plans give a building, the national heritage areas (RKY) it stands
@@ -22,6 +22,8 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   trench as the city surveyed it in 1996, and the damage of the capture of Helsinki in 1918 in the City Museum's
   photos. The second: the anti-aircraft batteries and the bomb damage of 1939–1944. For both, the defences in
   Museovirasto's register and the memorials, each site with a card.
+- **Other.** The city's 475 works of public art, coloured by period; the tram network of the timeline's year, with the
+  tracks closed before it in grey; and the Finnish Heritage Agency's photos of Helsinki at the places they name.
 - **Quests.** Find buildings from riddles and old photos, and guess their age with the colours switched off.
 
 A non-commercial project, made for curiosity and learning. It is a fork of Alexander Barakov's
@@ -57,7 +59,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 
 | Step | What it does |
 |---|---|
-| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, the public energy certificates, Wikidata's buildings, the City Museum's photos in Finna and the city's public art |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram tracks, the public energy certificates, Wikidata's buildings, the City Museum's and the Heritage Agency's photos in Finna and the city's public art |
 | `s01_load` | Buildings, standing and demolished → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's or the model's feature id) |
 | `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
 | `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes, addresses and the city config |
@@ -68,14 +70,15 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 | `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
+| `s12_other` | The Other menu: public art by period, the tram tracks through time (`trams.bin`) and the Heritage Agency's photos by place (`other.json`) |
 | `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage and the war memorials (`war.json`) |
 
 ## Run it
 
 ```bash
 uv sync
-for s in s00_fetch s01_load s02_attributes s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war; do uv run python -m pipeline.$s; done
-uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11   # years, street names, addresses, energy, war
+for s in s00_fetch s01_load s02_attributes s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war s12_other; do uv run python -m pipeline.$s; done
+uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11 && uv run python -m pipeline.test_s12   # years, street names, addresses, energy, war, photos
 python3 -m http.server 8642 --directory web
 ```
 
@@ -169,6 +172,13 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   point to a neighbouring site. That gives 50 sites to the first war and 14 to the second (Rysäkari to both), and leaves 74 older or
   undated ones (Suomenlinna, the Crimean War's batteries, and a few clearly of the first war such as Isosaari, whose
   pages say so only in passing). The register's 298 records of the land front's strongpoints are left to the survey.
+  The register has few of the second war's air-defence sites (in February 1944 the city had 13–15 heavy batteries
+  with 77 guns, 41 light guns, 36 searchlights and three coastal batteries, by the city's history portal), so 22 more
+  positions are gathered by hand in `s11_war.py` from the regiment's history (Ahti Lappi's articles and slides, a
+  National Defence University thesis), the Ilmatorjuntamuseo, Wikipedia and local papers, each placed at an address,
+  a place in the city's place-name register or a memorial's coordinates, and each card saying how near that is and
+  naming its source. Positions outside Helsinki and guesses are left out; the regiment's own maps of 1944 are too
+  small in scale to place the rest.
   War damage: the City Museum's photos in Finna from 1914–1918 and 1939–1945 whose title or subject words name both
   damage and the war ("pommitusvaurioita", "Helsingin valtaus"), not shelters, splinter boards or aircraft, placed at
   the city's address point for the address the museum gives; one dot per address (17 addresses and 62 photos of 1918,
@@ -176,6 +186,17 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   the city's 475 public artworks in the Service Map (the ids and names in `s11_war.py`), the Civil War of 1918 with the
   first war, with HAM's text shortened to its first sentences; the photos are not openly licensed, so the card links
   the Service Map instead. Wikidata types Helsinki's memorials as plain memorials, which is why it is not used.
+- **Other.** A menu like War's, of views that lie on the ground (`s12_other`): public art, every work of the city's
+  public art in the Service Map coloured by the period of the year in its credit ("Artist: Title, 1970"; 79 give
+  none); the trams, OpenHistoricalMap's tram tracks (CC0, drawn by volunteers) with the years each opened and closed
+  (two short stretches with no year at all are left out),
+  drawn three pixels wide (three.js's LineSegments2, vendored) in green while in use in the timeline's year and in
+  grey once closed; and the Finnish Heritage Agency's photos of Helsinki in Finna (CC BY 4.0, about 71,000), each at the
+  most exact place it names: an address, a building Wikidata names, a spot in the city's place-name register (a
+  square, park, island or street; not a district), or a point Finna gives other than the city's centre. Most name only
+  the city or a district and are left out. One dot per place; the page carries each place's first photo, and its card
+  loads all of them from one of 32 shards (`mvphotos/<nn>.json`, keyed by a CRC-32 of the place's name), oldest first,
+  each crediting its photographer and collection, with a button for each decade past a dozen photos.
 - **Quests.** Three walks (easy, medium, hard) in `pipeline/quests.py`, written for this map. `s09_quests` drops any
   step whose claims are not word for word in its Wikipedia article, whose place is not found, or whose year is not
   the map's year for the building. The hard walk uses 1800s photos from the City Museum as clues; Oodi, Kiasma and the
@@ -198,7 +219,9 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   orthophotos follow the timeline, the one of its year or the nearest before it; a click on a year takes the timeline
   there. Maps: 1749, 1780, 1820, 1838, 1870, 1878, 1900, 1909, 1917, 1925, 1940, 1952 and 1962 (the last three, like
   1917, show the centre only), and the guide maps (`Opaskartta_*`) of 1965, 1966, 1971, 1975, 1977, 1979, 1983,
-  1985, 1987, 1989, 1991 and 1999; orthophotos: 1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996, 2008, 2017, 2021
+  1985, 1987, 1989, 1991 and 1999, then the bird's-eye drawing of the inner city of 2014 (`Kuvakartta`, the last dated
+  map the city serves) and today's guide map (`Opaskartta_Helsinki`, kept up to date, on a button that reads Today);
+  orthophotos: 1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996, 2008, 2017, 2021
   and 2025. The other years cover only a strip of the city or leave holes, as measured on an overview of each layer;
   the 1800s plan is too faint to read. Plans stay whatever the year: the general plan for Greater Helsinki of 1923,
   the master plan proposals of 1932 (the central city) and 1960, the revised land use for 1980 drawn in 1972, and the
@@ -247,6 +270,9 @@ Data keeps the licence of its source:
   `rajapinta_suojellut:muinaisjaannos_piste` and `muu_kulttuuriperintokohde_piste`, and each site's page in the
   register (`kyppi.fi`) for its dating and description. CC BY 4.0.
 - War damage: Helsinki City Museum's photos in Finna (as for the archive photos), public domain (PDM).
+- Tram tracks: [OpenHistoricalMap](https://www.openhistoricalmap.org/), CC0.
+- Heritage Agency photos: Finnish Heritage Agency (Museovirasto) collections in [Finna](https://www.finna.fi), CC BY 4.0;
+  each card credits the photographer and the collection.
 - War memorials: HAM Helsinki Art Museum's public art through the city's [Service Map](https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta)
   (`api.hel.fi/servicemap/v2`, service 767). Texts CC BY 4.0; the photos are HAM's and not used.
 - RKY areas: Finnish Heritage Agency (Museovirasto), WFS `rajapinta_suojellut:rky_alue`. CC BY 4.0

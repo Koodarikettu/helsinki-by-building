@@ -74,12 +74,20 @@ FINNA_PARAMS = [("filter[]", 'building:"0/HKM/"'), ("filter[]", 'format:"0/Image
     [("field[]", f) for f in ("id", "title", "year", "images", "imageRights", "nonPresenterAuthors", "subjectPlaces", "subjects")]
 
 
-def fetch_finna(out: Path):
-    first = requests.get(FINNA, params=FINNA_PARAMS + [("page", 1)], headers=UA, timeout=120).json()
+# The Finnish Heritage Agency's openly licensed photos of Helsinki in Finna (about 71,000, CC BY 4.0), with the places
+# they name; s12_other puts those whose place it can find on the map.
+FINNA_MV_PARAMS = [("lookfor", "Helsinki"), ("filter[]", 'building:"0/Museovirasto/"'), ("filter[]", 'format:"0/Image/"'),
+                   ("filter[]", 'usage_rights_str_mv:"usage_B"'), ("limit", 100), ("sort", "id asc")] + \
+    [("field[]", f) for f in ("id", "title", "year", "images", "imageRights", "nonPresenterAuthors", "subjectPlaces", "geoLocations",
+                              "buildings")]  # the collection, which the licence asks to credit
+
+
+def fetch_finna(out: Path, params=FINNA_PARAMS):
+    first = requests.get(FINNA, params=params + [("page", 1)], headers=UA, timeout=120).json()
     pages = -(-first["resultCount"] // 100)
     with out.open("w") as f:
         for page in range(1, pages + 1):
-            d = first if page == 1 else requests.get(FINNA, params=FINNA_PARAMS + [("page", page)], headers=UA, timeout=120).json()
+            d = first if page == 1 else requests.get(FINNA, params=params + [("page", page)], headers=UA, timeout=120).json()
             if d.get("status") != "OK":
                 raise RuntimeError(f"finna page {page}: {d}")
             for r in d.get("records", []):
@@ -194,6 +202,18 @@ def fetch_wfs(out: Path, server: str, layer: str, extra: dict):
     print(name, n)
 
 
+# Helsinki's tram tracks through time from OpenHistoricalMap (CC0): each way with the years it opened and closed.
+OHM = "https://overpass-api.openhistoricalmap.org/api/interpreter"
+TRAMS = '[out:json][timeout:120];way["railway"="tram"](60.10,24.78,60.32,25.26);out tags geom;'
+
+
+def fetch_trams(out: Path):
+    r = requests.post(OHM, data={"data": TRAMS}, headers=UA, timeout=300)
+    r.raise_for_status()
+    out.write_bytes(r.content)
+    print("tram ways", len(r.json()["elements"]))
+
+
 # The register's own page for each defence site (other than the land front's strongpoints, which the city's survey
 # draws): its dating ("toinen maailmansota 1939–1945"), the kind of defence ("I maailmansodan varustukset") and its
 # description, none of which the WFS carries. s11_war sorts the sites into the two world wars by them.
@@ -238,8 +258,10 @@ def main():
     fetch_heights(out / "city_model_heights.csv")
     fetch_demolished(out / "demolished")
     fetch_finna(out / "finna_hkm.jsonl")
+    fetch_finna(out / "finna_mv.jsonl", FINNA_MV_PARAMS)
     fetch_public_art(out / "public_art.json")
     fetch_register(out)
+    fetch_trams(out / "ohm_trams.json")
 
 
 if __name__ == "__main__":

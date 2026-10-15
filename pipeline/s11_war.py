@@ -29,6 +29,7 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import shapely
+from pyproj import Transformer
 
 from .s03_tiles import to_local
 from .s08_archive import OPEN, addresses, keys_of, person
@@ -43,7 +44,7 @@ STATES = [
     ("tuhoutunut", "#8f979b", "Destroyed", "Tuhoutunut"),
     (None, "#cfc9bb", "Planned, or not known", "Suunniteltu tai ei tietoa"),
 ]
-COLORS = dict(structures="#3b2a20", register="#c1272d", photos="#e09a00", memorials="#1f4e8c")
+COLORS = dict(structures="#3b2a20", register="#c1272d", known="#7b3fa0", photos="#e09a00", memorials="#1f4e8c")
 # Museovirasto's words for the kinds of site, in English.
 KINDS = {
     "tykkiasemat": "gun positions", "linnoitukset": "fortifications", "linnakkeet": "forts", "luolat": "caves",
@@ -88,10 +89,11 @@ YEARS = [(1914, 1918), (1939, 1945)]
 ROMAN = dict(I=1, V=5, X=10, L=50)
 REGISTER = dict(label="Finnish Heritage Agency, register of ancient and historic remains",
                 label_fi="Museovirasto, muinaisjäännösrekisteri",
-                url="https://www.museovirasto.fi/fi/palvelut-ja-ohjeet/tietojarjestelmat/kulttuuriympariston-tietojarjestelmat/kulttuuriympaeristoen-paikkatietoaineistot")
+                url="https://www.museovirasto.fi/fi/palvelut-ja-ohjeet/tietojarjestelmat/kulttuuriympariston-tietojarjestelmat/kulttuuriympaeristoen-paikkatietoaineistot",
+                licence="CC BY 4.0")
 MUSEUM = dict(label="Helsinki City Museum, in Finna", label_fi="Helsingin kaupunginmuseo, Finna", url="https://www.finna.fi")
 ART = dict(label="HAM Helsinki Art Museum, public art, through the Service Map", label_fi="HAM, julkiset taideteokset, Palvelukartta",
-           url="https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta")
+           url="https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta", licence="CC BY 4.0")
 # The city's own account of the raids of 1944, with its air defence in numbers.
 HISTORY = dict(label="City of Helsinki, Helsinki's history: the great raids of 1944",
                label_fi="Helsingin kaupunki, Helsingin historia: suurpommitukset 1944",
@@ -99,7 +101,86 @@ HISTORY = dict(label="City of Helsinki, Helsinki's history: the great raids of 1
                url_fi="https://historia.hel.fi/fi/kaannekohdat/1900-luku/helsingin-suurpommitukset-1944")
 SURVEY = dict(label="City of Helsinki, First World War fortifications (survey of 1996)",
               label_fi="Helsingin kaupunki, ensimmäisen maailmansodan aikaiset maalinnoitukset (kartoitus 1996)",
-              url="https://hri.fi/data/fi/dataset/helsingin-ensimmaisen-maailmansodan-aikaiset-maalinnoitukset")
+              url="https://hri.fi/data/fi/dataset/helsingin-ensimmaisen-maailmansodan-aikaiset-maalinnoitukset", licence="CC BY 4.0")
+
+# Positions of the city's air defence in 1939–1944 that the register lacks, gathered by hand from the sources below; the
+# ones the register has (Myllykallio "Lautta", Taivaskallio, Patterimäki "Paja", Munkkiniemi "Torppa" and others) are
+# left to it. Each stands where its source puts it: an address, or a place in the city's place-name register (a park,
+# field, street, island or district) or a memorial's coordinates, and says how close that is. Outside Helsinki
+# (Westend, Mäkkylä) and guesses ("Kasapelto", probably Roihupelto) are left out.
+SRC = dict(
+    museum=("Ilmatorjuntamuseo, tykit", "https://www.ilmatorjuntamuseo.fi/ilmatorjuntamuseo/kokoelmat/tykit/"),
+    lehti=("Ilmatorjunta-lehti 2/2023 (Ahti Lappi)", "https://bin.yhdistysavain.fi/1601152/jLzVxzwJKBzageTXi4Z90_dH2C/Ilmatorjunta%202-2023.pdf"),
+    lappi=("Ahti Lappi: Helsingin ilmapuolustuskyvyn parantaminen 1943–1944",
+           "https://www.sshs.fi/content/uploads/2023/02/Helsingin_ilmapuolustuskyvyn_parantaminen_1943-1944.pdf"),
+    kauppi=("Kauppi, kandidaatintutkielma, Maanpuolustuskorkeakoulu 2013", "https://www.doria.fi/bitstream/handle/10024/93428/SK1517_Kauppi_VM.pdf"),
+    roihuvuori=("Wikipedia: Roihuvuori", "https://fi.wikipedia.org/wiki/Roihuvuori"),
+    vuosaari=("Vuosaari-lehti 2.3.2022", "https://www.vuosaarilehti.fi/2022/03/02/syyta-muistaa-helsingin-ilmapuolustusta-talvella-1944/"),
+    ilmatorjunta=("Wikipedia: Helsingin ilmatorjunta", "https://fi.wikipedia.org/wiki/Helsingin_ilmatorjunta"),
+    raids=("Wikipedia: Helsingin suurpommitukset", "https://fi.wikipedia.org/wiki/Helsingin_suurpommitukset"),
+    patterimaki=("Museovirasto, muinaisjäännösrekisteri: Patterimäki", "https://www.kyppi.fi/to.aspx?id=112.1000030675"),
+)
+NAMES_FI = {"1st heavy battery": "1. raskas patteri", "2nd heavy battery": "2. raskas patteri",
+            "101st light battery": "101. kevyt patteri", "105th light battery": "105. kevyt patteri", "Fire-control centre": "Tulenjohtokeskus"}
+HOW_NEAR = {  # what the dot stands for
+    "exact": ("The dot is at the address.", "Piste on osoitteessa."),
+    "place": ("The sources name the place, not the spot within it.", "Lähteet kertovat paikan, eivät kohtaa sen sisällä."),
+    "area": ("The sources name only the district or island: the dot marks its middle, not the position.",
+             "Lähteet kertovat vain alueen tai saaren: piste on sen keskellä, ei aseman kohdalla."),
+}
+# (name, kind in English and Finnish, years, where: ("name", place, kind of place) | ("addr", address) | ("wgs", lat, lon),
+#  how near, what it was in English and Finnish, source)
+POSITIONS = [
+    ("Kaivo", "Heavy anti-aircraft", "Raskas ilmatorjunta", "1944", ("name", "Kaivopuisto", "Puisto"), "place",
+     "Osasto Kaivo, the 61st and 62nd Heavy Anti-Aircraft Batteries, twelve 88 mm guns. In 1941 a light section stood in the park too.",
+     "Osasto Kaivo, 61. ja 62. raskas ilmatorjuntapatteri, yhteensä kaksitoista 88 mm:n tykkiä. Vuonna 1941 puistossa oli myös kevyt ilmatorjuntajaos.", "museum"),
+    ("Rata", "Heavy anti-aircraft", "Raskas ilmatorjunta", "1943–1944", ("name", "Santahamina", "Kaupunginosa"), "area",
+     "The 7th Heavy Anti-Aircraft Battery, six 88 mm guns and an Irja fire-control radar. The 91st (February 1944) and the 66th (August 1944) heavy batteries were on the island too.",
+     "7. raskas ilmatorjuntapatteri, kuusi 88 mm:n tykkiä ja Irja-tulenjohtotutka. Santahaminassa olivat myös 91. (helmikuu 1944) ja 66. raskas patteri (elokuu 1944).", "lehti"),
+    ("Käpy", "Heavy anti-aircraft", "Raskas ilmatorjunta", "1943–1944", ("name", "Käpylä", "Kaupunginosa"), "area",
+     "The 9th Heavy Anti-Aircraft Battery at Käpylä's trotting track, six 88 mm guns and an Irja radar; the 78th heavy battery was in Käpylä in February 1944.",
+     "9. raskas ilmatorjuntapatteri Käpylän raviradalla, kuusi 88 mm:n tykkiä ja Irja-tutka; Käpylässä oli helmikuussa 1944 myös 78. raskas patteri.", "lehti"),
+    ("Lato", "Heavy anti-aircraft", "Raskas ilmatorjunta", "1943–1944", ("name", "Patteripellonraitti", "Kevyen liikenteen väylä, polku"), "place",
+     "The 108th Heavy Anti-Aircraft Battery on the fields of Latokartano in Viikki, four 75 mm Škoda guns and an Irja radar. The path is named after the battery's field.",
+     "108. raskas ilmatorjuntapatteri Viikin Latokartanon pellolla, neljä 75 mm:n Škoda-tykkiä ja Irja-tutka. Patteripellonraitti on nimetty patterin pellon mukaan.", "lehti"),
+    ("Kasa", "Heavy anti-aircraft", "Raskas ilmatorjunta", "1944", ("name", "Prinsessantie", "Katu"), "place",
+     "The 107th Heavy Anti-Aircraft Battery, four 75 mm guns and an anti-aircraft machine gun, where the houses of Prinsessantie in Roihuvuori now stand.",
+     "107. raskas ilmatorjuntapatteri, neljä 75 mm:n tykkiä ja ilmatorjuntakonekivääri, nykyisten Prinsessantien talojen paikalla Roihuvuoressa.", "roihuvuori"),
+    ("Pommi", "Decoy battery", "Valepatteri", "1944", ("name", "Nordsjön kartano", "Kartano"), "place",
+     "A battery of three guns on the grounds of Vuosaari's Nordsjö manor, about 200 metres from the main building, from the raid of 26–27 February 1944.",
+     "Kolmen tykin patteri Vuosaaren Nordsjön kartanon mailla, noin 200 metrin päässä päärakennuksesta, 26.–27.2.1944 pommituksesta alkaen.", "vuosaari"),
+    ("1st heavy battery", "Heavy anti-aircraft", "Raskas ilmatorjunta", "1941", ("name", "Länsi-Mustasaari", "Saari, luoto, kari(kko), kivi(kko), särkkä"), "area",
+     "The 1st Heavy Anti-Aircraft Battery on Länsi-Mustasaari in Suomenlinna; a memorial gun stands on the island.",
+     "1. raskas ilmatorjuntapatteri Suomenlinnan Länsi-Mustasaaressa; saarella on muistotykki.", "lappi"),
+    ("2nd heavy battery", "Heavy anti-aircraft", "Raskas ilmatorjunta", "1941", ("name", "Kustaanmiekka", "Saari, luoto, kari(kko), kivi(kko), särkkä"), "area",
+     "The 2nd Heavy Anti-Aircraft Battery on Kustaanmiekka in Suomenlinna.", "2. raskas ilmatorjuntapatteri Suomenlinnan Kustaanmiekassa.", "lappi"),
+    *[(f"{isle}", "Coastal anti-aircraft", "Rannikon ilmatorjunta", "1944", ("name", isle, "Saari, luoto, kari(kko), kivi(kko), särkkä"), "area",
+       "One of the coast artillery's three anti-aircraft batteries on the islands, under the city's air-defence regiment in the raids of 1944.",
+       "Yksi rannikkotykistön kolmesta ilmatorjuntapatterista saarilla, alistettuna kaupungin ilmatorjuntarykmentille vuoden 1944 pommituksissa.", "kauppi")
+      for isle in ("Melkki", "Harmaja", "Isosaari")],
+    ("105th light battery", "Light anti-aircraft", "Kevyt ilmatorjunta", "1941", ("name", "Ilmalankatu", "Katu"), "area",
+     "The 105th Light Anti-Aircraft Battery at Ilmala.", "105. kevyt ilmatorjuntapatteri Ilmalassa.", "lappi"),
+    ("101st light battery", "Light anti-aircraft", "Kevyt ilmatorjunta", "1941", ("name", "Helsinki-Malmin lentoasema", "Pysäkki, asema"), "area",
+     "The 101st Light Anti-Aircraft Battery at Malmi airport.", "101. kevyt ilmatorjuntapatteri Malmin lentoasemalla.", "lappi"),
+    *[(place, "Light anti-aircraft", "Kevyt ilmatorjunta", "1941", ("name", place, laji), "area",
+       f"A light anti-aircraft section at {place}.", f"Kevyt ilmatorjuntajaos: {place}.", "lappi")
+      for place, laji in (("Verkkosaari", "Osa-alue"), ("Hernesaari", "Osa-alue"), ("Koskela", "Osa-alue"))],
+    ("Eläintarha", "Anti-aircraft machine guns", "Ilmatorjuntakonekiväärit", "1941", ("name", "Eläintarha", "Puisto"), "place",
+     "Anti-aircraft machine guns of the 105th company in Eläintarha, by Pasila.", "105. ilmatorjuntakonekiväärikomppanian konekiväärejä Eläintarhassa Pasilan laidalla.", "lappi"),
+    ("Alppila", "Anti-aircraft machine guns", "Ilmatorjuntakonekiväärit", "1941", ("name", "Alppila", "Osa-alue"), "area",
+     "An anti-aircraft machine-gun section in Alppila.", "Ilmatorjuntakonekiväärijaos Alppilassa.", "lappi"),
+    ("Postitalo", "Light anti-aircraft", "Kevyt ilmatorjunta", "1941", ("addr", "mannerheiminaukio 1"), "exact",
+     "An anti-aircraft machine-gun section at the main post office, with a 20 mm Breda gun.", "Ilmatorjuntakonekiväärijaos Postitalolla, jossa oli 20 mm:n Breda-tykki.", "lappi"),
+    ("Kokkokallio", "Searchlights", "Valonheittimet", "1943–1944", ("name", "Kokkokallio", "Puisto"), "place",
+     "Searchlights on Kokkokallio in Reimarla, named by the register's page on the nearby battery of Patterimäki.",
+     "Valonheittimiä Reimarlan Kokkokalliolla; mainittu muinaisjäännösrekisterissä läheisen Patterimäen kohdalla.", "patterimaki"),
+    ("Raija II", "Air-surveillance radar", "Ilmavalvontatutka", "1943–1944", ("wgs", 60.1340056, 25.0201889), "place",
+     "One of the two German Freya radars, called Raija, that watched for the bombers; its memorial plaque is on Kuninkaansaari.",
+     "Toinen pommikoneita valvoneista saksalaisista Freya-tutkista, Raija; sen muistolaatta on Kuninkaansaaressa.", "ilmatorjunta"),
+    ("Fire-control centre", "Command post", "Tulenjohtokeskus", "1944", ("addr", "korkeavuorenkatu 26"), "exact",
+     "The air defence's fire-control centre in the rock shelter at Korkeavuorenkatu 26; a bronze plaque by its door remembers it.",
+     "Ilmapuolustuksen tulenjohtokeskus Korkeavuorenkatu 26:n kalliosuojassa; oven pielessä on muistolaatta.", "raids"),
+]
 
 
 def roman(s: str) -> int:
@@ -229,6 +310,24 @@ def photos() -> list[list]:
     return out
 
 
+def positions() -> list:
+    """POSITIONS placed: an address point, a place in the place-name register, or WGS84 coordinates."""
+    names = gpd.read_file(RAW / "Nimisto_piste_rekisteritiedot.geojson")
+    place = {(r.nimi_suomi, r.laji_selite): (r.geometry.x, r.geometry.y) for r in names.itertuples() if r.geometry}
+    pts = gpd.read_file(RAW / "Osoiteluettelo_piste_rekisteritiedot.geojson")
+    addr = {f"{r.katunimi} {r.osoitenumero}".lower(): (r.geometry.x, r.geometry.y) for r in pts.itertuples()}
+    gk25 = Transformer.from_crs(4326, 3879, always_xy=True)
+    out = []
+    for name, kind_en, kind_fi, years, where, near, text, text_fi, src in POSITIONS:
+        xy = place[where[1], where[2]] if where[0] == "name" else addr[where[1]] if where[0] == "addr" \
+            else gk25.transform(where[2], where[1])
+        label, url = SRC[src]
+        out.append(dict(at=at(*xy), name=name, name_fi=NAMES_FI.get(name, name), sub=f"{kind_en} · {years}", sub_fi=f"{kind_fi} · {years}",
+                        text=f"{text} {HOW_NEAR[near][0]}", text_fi=f"{text_fi} {HOW_NEAR[near][1]}",
+                        source=dict(label=label, url=url)))
+    return sorted(out, key=lambda s: s["name_fi"])
+
+
 def memorials() -> list[list]:
     art = {a["id"]: a for a in json.loads((RAW / "public_art.json").read_text())}
     out = []
@@ -248,8 +347,10 @@ def memorials() -> list[list]:
     return out
 
 
-def kind(id, label, label_fi, sites, source, list=True):
-    return dict(id=id, label=label, label_fi=label_fi, color=COLORS[id], sites=sites, source=source, list=list)
+def kind(id, label, label_fi, sites, source, list=True, group=None):
+    """A kind of site; kinds of one group are a single choice in the menu."""
+    return dict(id=id, label=label, label_fi=label_fi, color=COLORS[id], sites=sites, source=source, list=list,
+                **({"group": group} if group else {}))
 
 
 def main():
@@ -288,13 +389,15 @@ def main():
                    "the great raids of February 1944. By then the city's air defence had 13–15 heavy anti-aircraft "
                    "batteries with 77 guns, 41 light guns, 36 searchlights, 13 sound locators and three coastal "
                    "anti-aircraft batteries on the islands. Only a few of their sites are in the heritage register, those "
-                   "whose remains it has surveyed: they are the dots here. The City Museum's photos show the bomb "
-                   "damage, and the memorials remember the dead."),
+                   "whose remains it has surveyed; more are known from the regiment's history and articles, many only "
+                   "to the park, field or island. The City Museum's photos show the bomb damage, and the memorials "
+                   "remember the dead."),
              text_fi=("Talvi- ja jatkosodassa Neuvostoliiton pommikoneet hyökkäsivät Helsinkiin yhä uudelleen, rajuimmin "
                       "helmikuun 1944 suurpommituksissa. Silloin kaupungin ilmapuolustuksessa oli 13–15 raskasta "
                       "ilmatorjuntapatteria ja niissä 77 tykkiä, 41 kevyttä it-tykkiä, 36 valonheitintä, 13 kuulosuunninta "
                       "sekä kolme rannikkoilmatorjuntapatteria saarilla. Muinaisjäännösrekisterissä on vain harvat niiden "
-                      "paikoista, ne joiden jäänteet on inventoitu: ne ovat kartan pisteet. Kaupunginmuseon kuvat "
+                      "paikoista, ne joiden jäänteet on inventoitu; useampia tunnetaan ilmatorjunnan historiikeista ja "
+                      "artikkeleista, monia vain puiston, kentän tai saaren tarkkuudella. Kaupunginmuseon kuvat "
                       "näyttävät pommitusten tuhot, ja muistomerkit muistavat kuolleita."),
              caveat=("Most batteries were temporary and are gone or built over; the city's archaeological inventory of "
                      "2024–2025 is still adding sites to the register. A photo stands at the address the museum gives it; "
@@ -303,7 +406,12 @@ def main():
                         "arkeologinen inventointi 2024–2025 lisää rekisteriin yhä kohteita. Kuva on museon sille antamassa "
                         "osoitteessa; kuvat ilman talonnumeroa on jätetty pois."),
              sources=[HISTORY],
-             kinds=[kind("register", "Defences in the heritage register", "Rekisteriin kirjatut varustukset", reg[1], REGISTER),
+             groups=dict(defences=dict(label="Defences and anti-aircraft positions", label_fi="Varustukset ja ilmatorjunta-asemat")),
+             kinds=[kind("register", "Defences in the heritage register", "Rekisteriin kirjatut varustukset", reg[1], REGISTER,
+                         group="defences"),
+                    kind("known", "Positions known from other sources", "Muista lähteistä tunnetut asemat", positions(),
+                         dict(label="Literature and articles; each card names its own", label_fi="Kirjallisuus ja artikkelit; kortti kertoo omansa",
+                              url=HISTORY["url"], url_fi=HISTORY["url_fi"]), group="defences"),
                     kind("photos", "Bomb damage", "Pommitusten tuhot", pho[1], MUSEUM),
                     kind("memorials", "Memorials", "Muistomerkit", mem[1], ART)]),
     ]
