@@ -1,6 +1,7 @@
 """Download the open data into data/raw/: Helsinki's WFS layers, the heights of its 3D city model and the buildings
 it records as demolished, Museovirasto's RKY areas, HSY's solar potential, the public energy certificates, Wikidata's
-buildings and the Helsinki City Museum's photos in Finna.
+buildings, the Helsinki City Museum's photos in Finna, the land front of 1914–1918, Museovirasto's register of
+ancient and historic remains and the city's public art.
 
 Each WFS layer comes whole in one GetFeature request (no paging); the check below fails if a server ever caps it.
 Licences: see README.
@@ -18,6 +19,7 @@ HEL = "https://kartta.hel.fi/ws/geoserver/avoindata/wfs"
 MV = "https://geoserver.museovirasto.fi/geoserver/rajapinta_suojellut/wfs"
 HSY = "https://kartta.hsy.fi/geoserver/wfs"
 NATIONAL = {"srsName": "EPSG:3879", "bbox": "25488000,6644000,25515000,6688000,EPSG:3879"}  # Helsinki's box
+MV_HELSINKI = {"srsName": "EPSG:3879", "CQL_FILTER": "kunta='Helsinki'"}  # the register names the municipality
 LAYERS = [  # (server, layer, extra parameters); saved as data/raw/<layer name>.geojson
     (HEL, "avoindata:Rakennukset_alue_rekisteritiedot", {}),        # buildings, EPSG:3879
     (HEL, "avoindata:Maavesi_manner", {}), (HEL, "avoindata:Maavesi_saaret", {}),                 # land
@@ -26,9 +28,16 @@ LAYERS = [  # (server, layer, extra parameters); saved as data/raw/<layer name>.
     (HEL, "avoindata:YLRE_Katualue_alue", {}),                       # street areas, for street names
     (HEL, "avoindata:Osoiteluettelo_piste_rekisteritiedot", {}),     # address points, to place archive photos
     (HEL, "avoindata:Nimisto_piste_rekisteritiedot", {}),            # place names, with why each was given
+    (HEL, "avoindata:Maalinnoitus_kohteet", {}),                     # the land front of 1914–1918: lines,
+    (HEL, "avoindata:Maalinnoitus_yksikot", {}),                     # its structures,
+    (HEL, "avoindata:Maalinnoitus_rajaukset", {}),                   # and its strongpoints' outlines
+    (MV, "rajapinta_suojellut:muinaisjaannos_piste", MV_HELSINKI),   # ancient and historic remains
+    (MV, "rajapinta_suojellut:muu_kulttuuriperintokohde_piste", MV_HELSINKI),  # other heritage sites
     (MV, "rajapinta_suojellut:rky_alue", NATIONAL),                  # RKY areas
     (HSY, "ilmasto_ja_energia:rakennukset_aurinkosahkopotentiaali", NATIONAL),  # solar potential by building, 2015
 ]
+# Public art in Helsinki, from the city's Service Map (service 767; texts CC BY 4.0, photos HAM's own): war memorials.
+SERVICEMAP = "https://api.hel.fi/servicemap/v2/unit/"
 # Every energy certificate in force, as Varke's register publishes them (about 110 MB); those of houses with one or
 # two homes are not public.
 ENERGY_CERTS = "https://www.energiatodistusrekisteri.fi/api/public/energiatodistukset/csv/energiatodistukset.csv"
@@ -172,20 +181,55 @@ def fetch_demolished(out: Path):
     print("demolished buildings' tiles", n)
 
 
+def fetch_wfs(out: Path, server: str, layer: str, extra: dict):
+    name = layer.split(":")[1]
+    r = requests.get(server, timeout=900, params=dict(service="WFS", version="2.0.0", request="GetFeature",
+                                                      typeNames=layer, outputFormat="application/json", **extra))
+    r.raise_for_status()
+    d = r.json()  # GeoServer reports errors as XML with status 200: this raises on them
+    n = len(d["features"])
+    if n != d.get("numberMatched", n):
+        raise RuntimeError(f"{name}: got {n} of {d['numberMatched']} features")
+    (out / f"{name}.geojson").write_bytes(r.content)
+    print(name, n)
+
+
+# The register's own page for each defence site (other than the land front's strongpoints, which the city's survey
+# draws): its dating ("toinen maailmansota 1939–1945"), the kind of defence ("I maailmansodan varustukset") and its
+# description, none of which the WFS carries. s11_war sorts the sites into the two world wars by them.
+REGISTER_PAGE = "https://www.kyppi.fi/to.aspx?id=112.{}"
+
+
+def fetch_register(raw: Path):
+    out = raw / "register"
+    out.mkdir(exist_ok=True)
+    sites = [f["properties"] for n in ("muinaisjaannos_piste", "muu_kulttuuriperintokohde_piste")
+             for f in json.loads((raw / f"{n}.geojson").read_text())["features"]]
+    ids = {p["mjtunnus"] for p in sites if "puolustus" in (p.get("tyyppi") or "")
+           and not (p.get("kohdenimi") or "").strip().startswith("Tukikohta")}
+    for i in sorted(ids):
+        r = requests.get(REGISTER_PAGE.format(i), headers=UA, timeout=60)
+        r.raise_for_status()
+        (out / f"{i}.html").write_bytes(r.content)
+    print("register pages", len(ids))
+
+
+def fetch_public_art(out: Path):
+    r = requests.get(SERVICEMAP, headers=UA, timeout=300, params=dict(
+        service=767, municipality="helsinki", page_size=1000, srid=3879, geometry="true"))
+    r.raise_for_status()
+    d = r.json()
+    if d["count"] != len(d["results"]):
+        raise RuntimeError(f"public art: got {len(d['results'])} of {d['count']}")
+    out.write_text(json.dumps(d["results"], ensure_ascii=False))
+    print("public art", d["count"])
+
+
 def main():
     out = Path("data/raw")
     out.mkdir(parents=True, exist_ok=True)
     for server, layer, extra in LAYERS:
-        name = layer.split(":")[1]
-        r = requests.get(server, timeout=900, params=dict(service="WFS", version="2.0.0", request="GetFeature",
-                                                          typeNames=layer, outputFormat="application/json", **extra))
-        r.raise_for_status()
-        d = r.json()  # GeoServer reports errors as XML with status 200: this raises on them
-        n = len(d["features"])
-        if n != d.get("numberMatched", n):
-            raise RuntimeError(f"{name}: got {n} of {d['numberMatched']} features")
-        (out / f"{name}.geojson").write_bytes(r.content)
-        print(name, n)
+        fetch_wfs(out, server, layer, extra)
     r = requests.post(WDQS, data={"query": QUERY}, headers={**UA, "Accept": "text/csv"}, timeout=600)
     r.raise_for_status()
     (out / "wd_buildings.csv").write_bytes(r.content)
@@ -194,6 +238,8 @@ def main():
     fetch_heights(out / "city_model_heights.csv")
     fetch_demolished(out / "demolished")
     fetch_finna(out / "finna_hkm.jsonl")
+    fetch_public_art(out / "public_art.json")
+    fetch_register(out)
 
 
 if __name__ == "__main__":

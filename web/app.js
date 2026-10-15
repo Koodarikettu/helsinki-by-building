@@ -12,18 +12,19 @@ const GROUP_COLORS = ['#ec0000', '#1f4e8c', '#d99a12', '#2e8b57', '#7b3fa0', '#0
 const MAX_GROUPS = GROUP_COLORS.length;
 const ATTR_W = 256;
 const WORKERS = Math.min(4, navigator.hardwareConcurrency || 2);
-// Solar shares the Energy button: the panel switches between the two.
-const MODE = { period: 0, floors: 1, energy: 2, layers: 3, solar: 4 };
+// Solar shares the Energy button and the demolished buildings the Period one: the panel switches between the two.
+const MODE = { period: 0, floors: 1, energy: 2, layers: 3, solar: 4, gone: 5 };
 // Energy labels G … A (index 1–7; 0 = no label), from red through yellow to green.
 const ENERGY_COLORS = ['#efeee9', '#c1272d', '#e4572e', '#f08a24', '#f6c445', '#c9d64a', '#8cc152', '#2e9a49'];
 // Solar potential: none, no suitable roof, then the steps of config.solar.steps from pale yellow to deep orange.
 const SOLAR_COLORS = ['#efeee9', '#c4c9cc', '#fbeeb0', '#f9dc7a', '#f6c445', '#f0a830', '#e88a24', '#d9661f', '#bf4a1c', '#8f2f14'];
 
-const [config, layers, attrBuf, info] = await Promise.all([
+const [config, layers, attrBuf, info, war] = await Promise.all([
   fetch('data/helsinki.json').then(r => r.json()),
   fetch('data/layers.json').then(r => r.json()),
   fetch('data/attrs.bin').then(r => r.arrayBuffer()),
   fetch('data/info.json').then(r => r.json()),   // per building: id (VTJ-PRT or the city's feature id), address
+  fetch('data/war.json').then(r => r.json()),    // layers on the ground rather than on the buildings, s11_war
 ]);
 const attrs = new DataView(attrBuf);
 
@@ -78,7 +79,11 @@ const FI_UI = {
   'Wikidata records this building as their place of work.': 'Wikidatan mukaan henkilö työskenteli tässä.',
   'Wikidata records this building as their birthplace.': 'Wikidatan mukaan henkilö syntyi tässä.',
   'Wikidata records this building as the place where they died.': 'Wikidatan mukaan henkilö kuoli tässä.',
-  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva', 'Old maps': 'Vanhat kartat', 'Maps': 'Kartat', 'Aerial photos': 'Ilmakuvat',
+  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva', 'Map': 'Kartta', 'Scale model': 'Pienoismalli', 'Under the buildings': 'Rakennusten alla', 'Old maps': 'Vanhat kartat', 'Aerial photos': 'Ilmakuvat', 'Plans': 'Kaavat', 'Noise': 'Melu',
+  'What Helsinki was meant to become: the city\'s master plans and their proposals.': 'Millainen Helsingistä piti tulla: kaupungin yleiskaavat ja niiden ehdotukset.',
+  'Road traffic noise by day (LAeq 7–22), as each year\'s survey found it.': 'Tieliikenteen melu päivällä (LAeq 7–22) kunkin vuoden meluselvityksessä.',
+  'General plan for Greater Helsinki': 'Suur-Helsingin yleissuunnitelma', 'Master plan proposal for the central city': 'Keskiosien yleiskaavaehdotus',
+  'Master plan proposal': 'Yleiskaavaehdotus', 'Revised land use for 1980': 'Tarkistettu maankäyttö vuodelle 1980', 'Master plan': 'Yleiskaava',
   'Pick a year, or drag the timeline: the map changes with it.': 'Valitse vuosi tai vedä aikajanaa: kartta vaihtuu sen mukana.',
   'Hide the buildings': 'Piilota rakennukset', 'No earlier name known': 'Ei aiempaa nimeä tiedossa',
   'Click a street to see its names and where they come from.': 'Napsauta katua: näet sen nimet ja mistä ne tulevat.',
@@ -101,7 +106,8 @@ const FI_UI = {
   'Street names': 'Kadunnimet', 'Earlier name known': 'Aiempi nimi tiedossa', 'Earlier names': 'Aiemmat nimet',
   'Named after, in Finnish': 'Nimen peruste', 'The place-name register gives no explanation.': 'Nimistörekisterissä ei ole selitystä.',
   'Read out of the history of the name in the place-name register.': 'Poimittu nimistörekisterin nimen historiasta.',
-  'Demolished': 'Purettu', 'Demolished building': 'Purettu rakennus', 'Helsinki 3D city model': 'Helsingin 3D-kaupunkimalli',
+  'War': 'Sota', 'Everything': 'Kaikki kohteet', 'On the map': 'Kartalla', 'Sources': 'Lähteet', 'Type': 'Tyyppi', 'Construction': 'Rakenne', 'History': 'Historia', 'Strongpoints': 'Tukikohdat', 'Find a site': 'Etsi kohde',
+  'Completed': 'Valmistuneet', 'Torn down': 'Puretut', 'torn down': 'purettua', 'Demolished': 'Purettu', 'Demolished building': 'Purettu rakennus', 'Helsinki 3D city model': 'Helsingin 3D-kaupunkimalli',
   'The 3D city model gives no year. Estimated from the nearest dated buildings, before the year it was demolished.': '3D-kaupunkimallissa ei ole vuotta. Arvioitu lähimpien rakennusten vuosista, ennen purkuvuotta.',
   'Click for the story and sources': 'Napsauta: tarina ja lähteet', 'Click to keep this card open': 'Napsauta pitääksesi kortin auki',
   'Play the city\'s growth': 'Toista kaupungin kasvu', 'Pause': 'Tauko', 'Close': 'Sulje',
@@ -327,7 +333,8 @@ const VERT = /* glsl */`
     float vis = uMode < 1.5 ? uMask[period] : 1.0;
     float g = clamp((uYear - year + 1.0) / uRise, 0.0, 1.0);
     g = g * g * (3.0 - 2.0 * g);
-    if (g <= 0.003 || vis <= 0.003 || (gone > 0.0 && uYear >= gone)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    bool down = gone > 0.0 && uYear >= gone;  // torn down by the year shown: gone, but in the view of the demolished
+    if (g <= 0.003 || vis <= 0.003 || (down && uMode < 4.5)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
     // Entrances, only while the film plays and while tiles load: a building drops in from its own side of the
     // sky, the same side every time (seeded by its id). Filters and scrubbing change the city at once.
@@ -351,6 +358,8 @@ const VERT = /* glsl */`
       c = floorsRamp(mod(a.z, 128.0));
     } else if (uMode < 2.5) {
       c = uEnergy[int(mod(a.z / 128.0, 8.0))];
+    } else if (uMode > 4.5) {
+      c = down ? uPalette[period] : uMaquette;
     } else if (uMode > 3.5) {
       c = uSolar[int(a.z / 1024.0)];
     } else {
@@ -367,7 +376,7 @@ const VERT = /* glsl */`
       }
     }
     if (year <= uYearFrom) c = mix(c, uMaquette, 0.8);
-    if (gone > 0.0) c = mix(c, vec3(1.0), 0.6);  // a ghost: torn down since
+    if (gone > 0.0 && uMode < 4.5) c = mix(c, vec3(1.0), 0.6);  // a ghost: torn down since
     // A quest's question about one building turns it red; a year riddle also hides every other age.
     if (uBlind > 0.5 && vGid == uSelected) c = vec3(0.925, 0.0, 0.0);
     else if (uBlind > 0.5 && uBlind < 1.5) c = uMaquette;
@@ -545,6 +554,7 @@ async function setPhoto(on) {
   photoOn = on;
   document.body.classList.toggle('photo', on);
   if (on && streetsOn) setStreets(false);
+  if (on && warOn) setWar(false);
   markTabs();
   showCity();
   if (on) { if (playing) stopPlay(); pinCard(-1); }
@@ -575,27 +585,50 @@ function pickPhoto(x, y) {
   return b ? b.object.userData.draw.uniforms.uAttr.value.image.data[8 * b.object.geometry.attributes.bld.getX(b.face.a) + 3] : -1;
 }
 
-// ---------- Old maps and aerial photos ----------
-// On the ground under the year's buildings, when switched on: the city's map or aerial photo of that year or the
-// nearest before it (WMS in ETRS-GK25, CC BY 4.0). A quadtree of 512 px tiles, each split once its pixels would show
-// larger than the screen's. Outside a map's sheet, and where a photo has nothing, the server paints black: left out.
+// ---------- Maps on the ground ----------
+// Under the year's buildings, when switched on (WMS in ETRS-GK25, CC BY 4.0). Old maps and aerial photos follow the
+// timeline: the one of that year or the nearest before it. A master plan or a noise survey stays, whatever the year.
+// A quadtree of 512 px tiles, each split once its pixels would show larger than the screen's. Outside a map's sheet,
+// and where a photo has nothing, the server paints black: left out. Noise comes as PNG, see-through where it is quiet.
 const GROUND_WMS = 'https://kartta.hel.fi/ws/geoserver/avoindata/wms';
-const GROUND = [
-  [1749, 'Pitajakuvauskartta_1749'], [1780, 'Rekognosointikartta_1780_1782'], [1820, 'Asemakaavakartta_1820'],
-  [1838, 'Asemakaavakartta_1838'], [1870, 'Senaatinkartta_1870'], [1878, 'Asemakaavakartta_1878'],
-  [1900, 'Plan_af_Helsingfors_1900'], [1909, 'Kartta_Helsingin_kaupungista_ja_sen_alueista_1909'],
-  [1917, 'Helsingin_kaupunki_1917_1918'], [1925, 'Helsingin_kaupungin_kartta_1925'],
-  ...[1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996].map(y => [y, `Ortoilmakuva_${y}`]),
-  [2008, 'Ortoilmakuva_2008_25cm'], [2017, 'Ortoilmakuva_2017_20cm'], [2021, 'Ortoilmakuva_2021_10cm'],
-  [2025, 'Ortoilmakuva_2025_5cm'],
-];  // years whose map or photo covers the city; the rest cover a strip or leave holes
+const GROUND = [  // [year, layer, kind]
+  ...[[1749, 'Pitajakuvauskartta_1749'], [1780, 'Rekognosointikartta_1780_1782'], [1820, 'Asemakaavakartta_1820'],
+    [1838, 'Asemakaavakartta_1838'], [1870, 'Senaatinkartta_1870'], [1878, 'Asemakaavakartta_1878'],
+    [1900, 'Plan_af_Helsingfors_1900'], [1909, 'Kartta_Helsingin_kaupungista_ja_sen_alueista_1909'],
+    [1917, 'Helsingin_kaupunki_1917_1918'], [1925, 'Helsingin_kaupungin_kartta_1925'], [1940, 'Helsinki_1940'],
+    [1952, 'Helsingin_matkailijakartta_1952'], [1962, 'Helsingin_keskustan_kartta_1962'],
+    ...[1965, 1966, 1971, 1975, 1977, 1979, 1983, 1985, 1987, 1989, 1991, 1999].map(y => [y, `Opaskartta_${y}`]),
+  ].map(g => [...g, 'map']),  // 1917, 1940, 1952 and 1962 show the centre only
+  ...[...[1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996].map(y => [y, `Ortoilmakuva_${y}`]),
+    [2008, 'Ortoilmakuva_2008_25cm'], [2017, 'Ortoilmakuva_2017_20cm'], [2021, 'Ortoilmakuva_2021_10cm'],
+    [2025, 'Ortoilmakuva_2025_5cm'],
+  ].map(g => [...g, 'photo']),  // years whose photo covers the city; the rest cover a strip or leave holes
+  ...[[1923, 'Helsingfors_generalplan_for_stor_helsingfors_1923'], [1932, 'Helsingin_kaupungin_keskiosien_yleiskaavaehdotus_1932'],
+    [1960, 'Helsingin_yleiskaavaehdotus_1960'], [1972, 'Tarkistettu_maankaytto_v_1980_1972'], [1992, 'Helsingin_yleiskaava_1992'],
+    [2002, 'Yleiskaava_2002'], [2016, 'Yleiskaava_2016']].map(g => [...g, 'plan']),
+  ...[[2012, 'Meluselvitys_2012_alue_01_tieliikenne_L_Aeq_paiva'], [2017, 'Meluselvitys_2017_alue_01_tieliikenne_L_Aeq_paiva'],
+    [2022, 'Meluselvitys_2022_Helsinki_kadut_ja_maantiet_LAeq_7-22_NPM']].map(g => [...g, 'noise']),  // 2007's covers part of the city, on another scale
+];
+const GROUND_KINDS = [['map', 'Old maps'], ['photo', 'Aerial photos'], ['plan', 'Plans'], ['noise', 'Noise']];
+// The Map menu: the scale model, the city with nothing under it, then each kind of map.
+const MAP_KINDS = [['', 'Scale model'], ...GROUND_KINDS];
+const PLAN_NAMES = { 1923: 'General plan for Greater Helsinki', 1932: 'Master plan proposal for the central city',
+  1960: 'Master plan proposal', 1972: 'Revised land use for 1980', 1992: 'Master plan', 2002: 'Master plan', 2016: 'Master plan' };
+// The surveys' own colours from 40 dB up in steps of 5, as their legends draw them; 2012's go on to 80 and 85.
+const NOISE_COLORS = ['#dbff91', '#b9ff4c', '#4cb94c', '#ffff4c', '#ffe391', '#ffb94c', '#ff4c4c', '#b94cff', '#704c70', '#5e4c5e'];
 const GROUND_ROOT = 65536, GROUND_PX = 512;
 const GROUND_SHADER = {
   glslVersion: THREE.GLSL3,
   depthTest: false,  // drawn after the land and water, over them; the buildings come after and stand on it
+  // see-through noise blends without joining the transparent pass, which would draw it over the buildings
+  blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
   vertexShader: 'out vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `precision highp float; uniform sampler2D map; in vec2 vUv; out vec4 outColor;
-    void main() { vec3 c = texture(map, vUv).rgb; if (max(c.r, max(c.g, c.b)) < 0.035) discard; outColor = vec4(c, 1.0); }`,
+  fragmentShader: `precision highp float; uniform sampler2D map; uniform bool clear; in vec2 vUv; out vec4 outColor;
+    void main() {
+      vec4 c = texture(map, vUv);
+      if (clear ? c.a < 0.02 : max(c.r, max(c.g, c.b)) < 0.035) discard;
+      outColor = clear ? c : vec4(c.rgb, 1.0);
+    }`,
 };
 const ground = new THREE.Group();
 scene.add(ground);
@@ -603,7 +636,12 @@ land.renderOrder = water.renderOrder = -2;
 const groundTiles = new Map(), groundLoader = new THREE.TextureLoader();
 const groundGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 let groundOn = false, groundSrc = null, groundPrev = null;
-const groundAt = Y => GROUND.findLast(([y]) => y <= Y);
+let groundPick = 'photo';  // 'map' or 'photo' to follow the timeline, or the plan or noise survey chosen
+function groundShown() {
+  if (typeof groundPick !== 'string') return groundPick;
+  const Y = uniforms.uYear.value, last = k => GROUND.findLast(([y, , kind]) => kind === k && y <= Y);
+  return last(groundPick) ?? last('map');  // before the first photo, the map
+}
 
 function groundTile(src, L, i, j, load) {
   const key = `${src}/${L}/${i}/${j}`;
@@ -611,11 +649,13 @@ function groundTile(src, L, i, j, load) {
   if (!t && load) {
     const s = GROUND_ROOT / 2 ** L, x = -GROUND_ROOT / 2 + i * s, z = -GROUND_ROOT / 2 + j * s;
     const e = config.origin[0] + x, n = config.origin[1] - z;  // west and north edges; WMS 1.3.0 puts northing first
+    const clear = src.startsWith('Melu');
     groundTiles.set(key, t = { mesh: null, ready: false, used: 0 });
     groundLoader.load(`${GROUND_WMS}?service=WMS&version=1.3.0&request=GetMap&layers=avoindata:${src}&styles=&crs=EPSG:3879` +
-      `&bbox=${n - s},${e},${n},${e + s}&width=${GROUND_PX}&height=${GROUND_PX}&format=image/jpeg&bgcolor=0x000000`, tex => {
+      `&bbox=${n - s},${e},${n},${e + s}&width=${GROUND_PX}&height=${GROUND_PX}` +
+      (clear ? '&format=image/png&transparent=true' : '&format=image/jpeg&bgcolor=0x000000'), tex => {
       Object.assign(tex, { colorSpace: THREE.NoColorSpace, anisotropy: 8 });
-      t.mesh = new THREE.Mesh(groundGeo, new THREE.ShaderMaterial({ ...GROUND_SHADER, uniforms: { map: { value: tex } } }));
+      t.mesh = new THREE.Mesh(groundGeo, new THREE.ShaderMaterial({ ...GROUND_SHADER, uniforms: { map: { value: tex }, clear: { value: clear } } }));
       t.mesh.position.set(x + s / 2, 0.1, z + s / 2);
       t.mesh.scale.set(s, 1, s);
       t.mesh.renderOrder = -1;
@@ -636,8 +676,8 @@ function inView(L, i, j) {
 function updateGround() {
   ground.visible = groundOn && !photoOn;
   if (!ground.visible) return;
-  const src = groundAt(uniforms.uYear.value)?.[1] ?? null;
-  if (src !== groundSrc) { groundPrev = groundSrc; groundSrc = src; markGroundYear(); }
+  const src = groundShown()?.[1] ?? null;
+  if (src !== groundSrc) { groundPrev = groundSrc; groundSrc = src; drawGroundBox(); }
   for (const m of ground.children) m.visible = false;
   if (!src) return;
   frustum.setFromProjectionMatrix(projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
@@ -662,41 +702,60 @@ function updateGround() {
     }
   }
 }
-const groundBtn = document.getElementById('ground'), groundBox = document.getElementById('ground-box');
+const groundBox = document.getElementById('ground-box');
 let mapAlone = false;
 function setGround(on) {
   groundOn = on;
-  groundBtn.setAttribute('aria-pressed', on);
   groundBox.hidden = !on;
   if (on) collapsePanelOnPhone();  // the legend's sheet would cover the years
-  showCity(); markGroundYear();
+  showCity(); drawGroundBox(); drawPicks();
 }
-groundBtn.onclick = () => setGround(!groundOn);
-// The city drawn over the ground: hidden in the aerial view, and under an old map when the map is to be seen alone.
+// A kind from the Map menu: a map or photo takes the timeline to its first year when it has none so early; a plan or
+// survey starts at the latest. '' is the scale model.
+function pickGround(k) {
+  if (k === 'map' || k === 'photo') {
+    groundPick = k;
+    const first = GROUND.find(e => e[2] === k);
+    if (uniforms.uYear.value < first[0]) setGroundYear(first[0]);
+  } else if (k) groundPick = GROUND.findLast(e => e[2] === k);
+  setGround(!!k);
+}
+const groundKind = () => !groundOn ? '' : typeof groundPick === 'string' ? groundPick : groundPick[2];
+// The city drawn over the ground: hidden in the aerial view, and under a map when the map is to be seen alone.
 function showCity() {
   flat.visible = !photoOn;
   blocks.visible = labelGroup.visible = !photoOn && !(groundOn && mapAlone);
 }
-// Every map and photo by its year: a click takes the timeline there, and the one lying on the ground stays marked.
-function renderGroundBox() {
-  const split = GROUND.findIndex(([, src]) => src.startsWith('Orto'));
-  const chips = list => `<div class="ground-years">${list.map(([y]) => `<button data-year="${y}" aria-pressed="false">${y}</button>`).join('')}</div>`;
-  groundBox.innerHTML = `<p>${t('Pick a year, or drag the timeline: the map changes with it.')}</p>
-    <h3>${t('Maps')}</h3>${chips(GROUND.slice(0, split))}<h3>${t('Aerial photos')}</h3>${chips(GROUND.slice(split))}
+function setGroundYear(y) {
+  stopPlay();
+  uniforms.uYear.value = y;
+  uniforms.uYearFrom.value = Math.min(uniforms.uYearFrom.value, y - 1);
+  drawHist();
+}
+// The chosen kind's years at the side: a map or photo takes the timeline to its year, a plan or survey stays put. The
+// one lying on the ground is marked, and drawn again whenever the timeline brings another.
+function drawGroundBox() {
+  const g = groundOn && groundShown(), kind = groundKind();
+  if (!kind) return;
+  const focused = groundBox.contains(document.activeElement) && { ...document.activeElement.dataset };
+  const top = g?.[0] === 2012 ? 10 : 8;
+  groundBox.innerHTML = `<h3>${t(GROUND_KINDS.find(([k]) => k === kind)[1])}</h3>
+    <p>${t({ plan: 'What Helsinki was meant to become: the city\'s master plans and their proposals.',
+      noise: 'Road traffic noise by day (LAeq 7–22), as each year\'s survey found it.' }[kind] ||
+      'Pick a year, or drag the timeline: the map changes with it.')}</p>
+    <div class="ground-years">${GROUND.map((e, i) => e[2] !== kind ? '' :
+      `<button data-i="${i}" aria-pressed="${e === g}">${e[0]}</button>`).join('')}</div>
+    ${kind === 'plan' && g ? `<p class="ground-name">${t(PLAN_NAMES[g[0]])} ${g[0]}</p>` : ''}
+    ${kind === 'noise' && g ? `<div class="noise-scale" aria-label="dB">${NOISE_COLORS.slice(0, top).map((c, i) =>
+      `<span><i style="background:${c}"></i>${40 + 5 * i}${i === top - 1 ? '+' : ''}</span>`).join('')}</div>` : ''}
     <label><input type="checkbox"${mapAlone ? ' checked' : ''}> ${t('Hide the buildings')}</label>`;
-  groundBox.querySelectorAll('[data-year]').forEach(b => b.onclick = () => {
-    const y = +b.dataset.year;
-    stopPlay();
-    uniforms.uYear.value = y;
-    uniforms.uYearFrom.value = Math.min(uniforms.uYearFrom.value, y - 1);
-    drawHist();
+  groundBox.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
+    const e = GROUND[+b.dataset.i];
+    if (e[2] === 'map' || e[2] === 'photo') { groundPick = e[2]; setGroundYear(e[0]); } else groundPick = e;
+    drawGroundBox();
   });
   groundBox.querySelector('input').onchange = e => { mapAlone = e.target.checked; if (mapAlone) pinCard(-1); showCity(); };
-  markGroundYear();
-}
-function markGroundYear() {
-  const g = groundOn && groundAt(uniforms.uYear.value);
-  groundBox.querySelectorAll('[data-year]').forEach(b => b.setAttribute('aria-pressed', !!g && +b.dataset.year === g[0]));
+  if (focused) groundBox.querySelector(focused.i ? `[data-i="${focused.i}"]` : 'input')?.focus();
 }
 
 // ---------- Street names, then and now ----------
@@ -724,6 +783,7 @@ async function loadStreets() {
 }
 const streetsBtn = document.querySelector('.streets-mode');
 function setStreets(on) {
+  if (on && warOn) setWar(false);
   streetsOn = on;
   uniforms.uPale.value = on ? 1 : 0;
   uniforms.uHover.value = -1;
@@ -739,12 +799,13 @@ function setStreets(on) {
   if (on || streetLoad) (streetLoad ??= loadStreets()).then(s => { s.mesh.visible = streetsOn; renderPanel(); });
 }
 streetsBtn.onclick = () => setStreets(!streetsOn);
-// One tab pressed: the street-name and aerial views stand over the colourings.
+// One tab pressed: the street-name, war and aerial views stand over the colourings.
 function markTabs() {
-  const m = uniforms.uMode.value === MODE.solar ? MODE.energy : uniforms.uMode.value;
-  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !photoOn && !streetsOn && +b.dataset.mode === m));
+  const m = { [MODE.solar]: MODE.energy, [MODE.gone]: MODE.period }[uniforms.uMode.value] ?? uniforms.uMode.value;
+  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !photoOn && !streetsOn && !warOn && +b.dataset.mode === m));
   document.querySelector('.photo-mode').setAttribute('aria-pressed', photoOn);
   streetsBtn.setAttribute('aria-pressed', streetsOn);
+  warPick.classList.toggle('on', warOn);
 }
 function pickStreet(x, y) {
   if (!streetsOn || photoOn || !streetMap) return null;
@@ -784,6 +845,152 @@ function pinStreet(name, x, y) {
   collapsePanelOnPhone();
   card.querySelector('.card-close').onclick = () => pinCard(-1);
   card.querySelector('details')?.addEventListener('toggle', () => placeCard(x, y));
+  placeCard(x, y);
+}
+
+// ---------- War ----------
+// A view of its own (pipeline/s11_war.py), chosen from a menu: one world war at a time, all its sites or one kind of
+// them. The land front's lines are coloured by what the survey of 1996 found of them, the sites are dots coloured by
+// kind, each opening a card. The buildings fade and take no clicks, as in the street-name view. The dots hang on the
+// land, which the aerial view and the GPU pick leave out, and are made the first time their war is shown.
+for (const E of war.eras) for (const K of E.kinds) for (const s of K.sites) Object.assign(s, { kind: K, era: E });
+let warOn = false, warEra = 0, warKind = null;  // null: every kind of the war's sites
+const warPick = document.querySelector('.war-pick'), mapPick = document.querySelector('.map-pick');
+const DOT = (() => {
+  const c = document.createElement('canvas'), x = c.getContext('2d');
+  c.width = c.height = 32;
+  x.beginPath(); x.arc(16, 16, 14, 0, 2 * Math.PI); x.fillStyle = '#fff'; x.fill();
+  return new THREE.CanvasTexture(c);
+})();
+async function trenchLines(E) {
+  const buf = await (await fetch(`data/${E.lines}`)).arrayBuffer();
+  const [nLines, nVerts] = new Uint32Array(buf, 0, 2);
+  const start = new Uint32Array(buf, 8, nLines + 1), state = new Uint8Array(buf, 8 + 4 * (nLines + 1), nLines);
+  const xz = new Float32Array(buf, 8 + 4 * (nLines + 1) + Math.ceil(nLines / 4) * 4, 2 * nVerts);
+  const pos = new Float32Array(3 * nVerts), color = new Float32Array(3 * nVerts), index = [];
+  const cols = E.legend.map(g => new THREE.Color(g.color));
+  for (let l = 0; l < nLines; l++) for (let v = start[l]; v < start[l + 1]; v++) {
+    pos.set([xz[2 * v], 0.3, xz[2 * v + 1]], 3 * v);
+    cols[state[l]].toArray(color, 3 * v);
+    if (v + 1 < start[l + 1]) index.push(v, v + 1);
+  }
+  const g = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    .setAttribute('color', new THREE.BufferAttribute(color, 3)).setIndex(index);
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true }));
+}
+async function buildEra(E) {
+  if (E.built) return;
+  E.built = true;
+  for (const K of E.kinds) {
+    K.obj = new THREE.Group();
+    flat.add(K.obj);
+    const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(K.sites.flatMap(s => [s.at[0], 1, s.at[1]]), 3));
+    // A white ring under each dot, so it reads on any map; on top of the buildings, so none hides behind one.
+    const dots = (px, order, color) => Object.assign(new THREE.Points(g, new THREE.PointsMaterial({ size: px * renderer.getPixelRatio(),
+      sizeAttenuation: false, map: DOT, alphaTest: 0.5, depthTest: false, color })), { renderOrder: order });
+    K.obj.add(dots(11, 3, '#ffffff'), dots(7, 4, K.color));
+  }
+  if (E.lines) E.kinds.find(K => K.id === 'structures').obj.add(await trenchLines(E));  // the land front's own lines
+}
+function setWar(on) {
+  if (on && streetsOn) setStreets(false);
+  warOn = on;
+  uniforms.uPale.value = on ? 1 : 0;
+  uniforms.uHover.value = -1;
+  if (on) {
+    if (photoOn) setPhoto(false);
+    uniforms.uMode.value = MODE.period;
+    maskTarget = periods.map(() => 1);
+    buildEra(war.eras[warEra]);
+  }
+  markTabs();
+  pinCard(-1);
+  renderPanel(); drawHist(); drawPicks();
+}
+const warNow = () => warOn && !photoOn ? war.eras[warEra] : null;
+const warKinds = E => E.kinds.filter(K => !warKind || K.id === warKind);
+const warShown = () => warNow() ? warKinds(warNow()) : [];
+function showWar() {
+  const shown = warShown();
+  for (const E of war.eras) for (const K of E.kinds) if (K.obj) K.obj.visible = shown.includes(K);
+  if (pinnedSite && !shown.includes(pinnedSite.kind)) pinCard(-1);  // its war or kind is no longer shown
+}
+// The two menus in the bar: the war and the kinds of its sites, and the map under the buildings. A choice closes its
+// menu, as does a click anywhere else.
+function drawPicks() {
+  warPick.classList.toggle('on', warOn);
+  warPick.querySelector('summary').textContent = t('War');  // which war: the menu marks it, the legend names it
+  warPick.querySelector('.menu').innerHTML = war.eras.map((E, e) => `<p class="menu-head">${esc(tr(E, 'label'))} · ${E.years}</p>${
+    [null, ...E.kinds].map(K => `<button data-war="${e}:${K ? K.id : ''}" aria-pressed="${warOn && warEra === e && warKind === (K ? K.id : null)}">${
+      K ? esc(tr(K, 'label')) : t('Everything')}</button>`).join('')}`).join('');
+  const k = groundKind();
+  mapPick.querySelector('summary').innerHTML = `${t('Map')}: <b>${t(MAP_KINDS.find(([x]) => x === k)[1])}</b>`;
+  mapPick.querySelector('.menu').innerHTML = `<p class="menu-head">${t('Under the buildings')}</p>${MAP_KINDS.map(([x, label]) =>
+    `<button data-ground="${x}" aria-pressed="${x === k}">${t(label)}</button>`).join('')}`;
+}
+warPick.querySelector('.menu').onclick = e => {
+  const b = e.target.closest('[data-war]');
+  if (!b) return;
+  const [era, kind] = b.dataset.war.split(':');
+  warEra = +era; warKind = kind || null; warPick.open = false;
+  setWar(true);
+};
+mapPick.querySelector('.menu').onclick = e => {
+  const b = e.target.closest('[data-ground]');
+  if (b) { mapPick.open = false; pickGround(b.dataset.ground); }
+};
+addEventListener('pointerdown', e => { for (const d of [warPick, mapPick]) if (d.open && !d.contains(e.target)) d.open = false; });
+for (const d of [warPick, mapPick]) d.addEventListener('toggle', () => { if (d.open) (d === warPick ? mapPick : warPick).open = false; });
+addEventListener('keydown', e => { if (e.key === 'Escape') warPick.open = mapPick.open = false; });
+// The dot nearest the pointer, within a few pixels.
+const sv = new THREE.Vector3();
+function pickSite(x, y) {
+  let best = null, bd = 12 ** 2;
+  for (const s of warShown().flatMap(K => K.sites)) {
+    sv.set(s.at[0], 1, s.at[1]).project(camera);
+    if (sv.z > 1) continue;
+    const d = ((sv.x + 1) / 2 * canvas.clientWidth - x) ** 2 + ((1 - sv.y) / 2 * canvas.clientHeight - y) ** 2;
+    if (d < bd) { bd = d; best = s; }
+  }
+  return best;
+}
+// The survey's, the register's and the museum's own words are Finnish, and stay so. Photos browse as a building's do.
+function siteHtml(s, pinned) {
+  const K = s.kind, n = s.photos?.length;
+  slides = (s.photos || []).map((a, i) => ({ src: FINNA_IMG(a.r), label: n > 1 ? `${i + 1}/${n}` : String(a.y), page: FINNA_PAGE(a.r),
+    credit: `${esc(a.t || '')}, ${a.y}${a.m ? ', ' + esc(a.m) : ''}, ${pinned
+      ? `${link(FINNA_PAGE(a.r), 'Helsingin kaupunginmuseo')}, ${link(LICENCE[a.l], a.l)}` : `Helsingin kaupunginmuseo, ${esc(a.l)}`}` }));
+  slide = 0;
+  return `<button class="card-close" aria-label="${t('Close')}">×</button>${slides.length ? figureHtml(pinned) : ''}
+    <header class="card-head"><h3>${esc(tr(s, 'name'))}</h3>${tr(s, 'sub') ? `<p class="sv">${esc(tr(s, 'sub'))}</p>` : ''}</header>
+    ${s.rows ? `<section><dl>${s.rows.map(([k, v]) => `<dt>${t(k)}</dt><dd lang="fi">${esc(v)}</dd>`).join('')}</dl></section>` : ''}
+    ${tr(s, 'text') ? `<section><p class="why">${esc(tr(s, 'text'))}</p></section>` : ''}
+    <section class="sources"><h4>${t('Source')}</h4><p>${link(tr(s, 'url') || K.source.url, tr(K.source, 'label'))}${s.photos ? '' : ', CC BY 4.0'}</p></section>`;
+}
+let hoverSite = null, pinnedSite = null;
+function showSite(s, x, y) {
+  if (pinnedGid >= 0 || pinnedStreet || pinnedSite || phone.matches) return;
+  if (s !== hoverSite || card.hidden) {
+    hoverSite = s; hoverGid = -1;
+    card.innerHTML = siteHtml(s, false);
+    wireSlides();
+    card.classList.remove('pinned');
+    card.hidden = false;
+    card.querySelector('img')?.addEventListener('load', () => placeCard(...(pointer || [x, y])));
+  }
+  placeCard(x, y);
+}
+function pinSite(s, x, y) {
+  pinCard(-1);
+  pinnedSite = s;
+  card.innerHTML = siteHtml(s, true);
+  wireSlides();
+  card.classList.add('pinned');
+  card.hidden = false;
+  lastPin = [x, y];
+  collapsePanelOnPhone();
+  card.querySelector('.card-close').onclick = () => pinCard(-1);
+  card.querySelector('img')?.addEventListener('load', () => placeCard(x, y));
   placeCard(x, y);
 }
 
@@ -901,6 +1108,10 @@ function photosHtml(b, im, credit, pinned) {
   const more = !archive.length || pinned ? '' : `<p class="more-photos">${LANG === 'fi'
     ? `+ ${archive.length} arkistokuva${archive.length > 1 ? 'a' : ''}, ${span}. Selaa napsauttamalla`
     : `+ ${archive.length} archive photo${archive.length > 1 ? 's' : ''}, ${span}. Click to browse`}</p>`;
+  return figureHtml(pinned, more);
+}
+function figureHtml(pinned, more = '') {
+  const s = slides[slide];
   return `<figure class="photo${s.sv ? ' sv' : ''}"><div class="frame">${s.sv ? `<img data-sv="${esc(s.sv)}" alt="">` : `<img src="${esc(s.src)}" alt="">`}
     ${pinned && slides.length > 1 ? `<button class="prev" aria-label="${t('Earlier')}">‹</button><button class="next" aria-label="${t('Later')}">›</button>` : ''}
     ${slides.length > 1 ? `<span class="year">${s.label}</span>` : ''}</div>
@@ -1035,7 +1246,7 @@ function placeCard(x, y) {
 }
 let hoverGid = -1;
 function showCard(gid, x, y) {
-  if (pinnedGid >= 0 || pinnedStreet || phone.matches) return;
+  if (pinnedGid >= 0 || pinnedStreet || pinnedSite || phone.matches) return;
   if (cardsLocked()) { card.hidden = true; return; }
   if (gid < 0) { card.hidden = true; hoverGid = -1; return; }
   if (gid !== hoverGid || card.hidden) {
@@ -1052,7 +1263,7 @@ function showCard(gid, x, y) {
 }
 function pinCard(gid, x, y) {
   pinnedGid = gid;
-  pinnedStreet = null;
+  pinnedStreet = pinnedSite = hoverSite = null;
   if (streetMap) streetMap.picked.visible = false;
   hoverGid = -1;
   uniforms.uSelected.value = gid;
@@ -1076,7 +1287,7 @@ let pointer = null, dragging = false, downAt = null;
 canvas.addEventListener('pointermove', e => { pointer = [e.clientX, e.clientY]; });
 canvas.addEventListener('pointerdown', e => {
   dragging = true; downAt = [e.clientX, e.clientY];
-  if (pinnedGid < 0 && !pinnedStreet) card.hidden = true;
+  if (pinnedGid < 0 && !pinnedStreet && !pinnedSite) card.hidden = true;
 });
 canvas.addEventListener('pointerup', e => {
   dragging = false;
@@ -1085,12 +1296,16 @@ canvas.addEventListener('pointerup', e => {
     const street = pickStreet(e.clientX, e.clientY);
     return street && street !== pinnedStreet ? pinStreet(street, e.clientX, e.clientY) : pinCard(-1);
   }
+  if (warNow()) {
+    const site = pickSite(e.clientX, e.clientY);
+    return site && site !== pinnedSite ? pinSite(site, e.clientX, e.clientY) : pinCard(-1);
+  }
   const gid = photoOn ? pickPhoto(e.clientX, e.clientY) : pick(e.clientX, e.clientY);
   if (quest && !solved && qStep().kind === 'find') { questClick(gid); return; }
   if (cardsLocked()) return;
   pinCard(gid === pinnedGid ? -1 : gid, e.clientX, e.clientY);
 });
-canvas.addEventListener('pointerleave', () => { pointer = null; if (pinnedGid < 0 && !pinnedStreet) card.hidden = true; uniforms.uHover.value = -1; });
+canvas.addEventListener('pointerleave', () => { pointer = null; if (pinnedGid < 0 && !pinnedStreet && !pinnedSite) card.hidden = true; uniforms.uHover.value = -1; });
 
 // ---------- Flying to a building ----------
 let bagIndex = null;
@@ -1194,6 +1409,7 @@ function startQuest(q, n, sc = 0, mk = []) {
   setPhoto(false);
   setGround(false);  // an old photo would give the year away
   setStreets(false);  // a quest is about buildings
+  setWar(false);
   pinCard(-1);
   enterStep(true);
 }
@@ -1435,18 +1651,53 @@ function renderPanel() {
       ${row(STREET_COLORS[1], t('No earlier name known'), streetMap && streetMap.names.length - old)}</div>
       <p class="note">${t('Click a street to see its names and where they come from.')}</p>
       <a class="src" href="${NAMES_URL()}" target="_blank" rel="noopener">${t('Helsinki place names')}, CC BY 4.0</a>`;
-  } else if (mode === MODE.period) {
-    panel.innerHTML = `<h2>${t('Built in')}</h2><div class="swatches">${periods.map((p, i) => `
-      <button class="swatch" data-i="${i}" aria-pressed="${!!maskTarget[i]}">
-        <i style="background:${p.color}"></i><span>${t(p.label)}</span><span class="n">${fmt(totals[i])}</span>
-      </button>`).join('')}</div>
-      <p class="note">${t('Click a period to see it alone. Paler buildings have an approximate year.')}</p>`;
-    panel.querySelectorAll('.swatch').forEach(b => b.onclick = () => {
-      const i = +b.dataset.i, m = maskTarget;
-      const solo = m.every((v, j) => (j === i) === !!v);
-      maskTarget = periods.map((_, j) => (solo || j === i) ? 1 : 0);
-      renderPanel(); drawHist();
+  } else if (warOn) {
+    const E = war.eras[warEra], shown = warKinds(E), land = shown.some(K => K.id === 'structures');
+    const lists = [...(land ? [[t('Strongpoints'), E.places]] : []), ...shown.filter(K => K.list).map(K => [tr(K, 'label'), K.sites])];
+    const sources = shown.map(K => K.source).filter((x, i, all) => all.findIndex(y => y.url === x.url) === i);
+    panel.innerHTML = `<h2 class="layer-title">${esc(tr(E, 'label'))}</h2>
+      <p class="layer-era">${esc(E.years)}${warKind ? ` · ${esc(tr(shown[0], 'label'))}` : ''}</p>
+      <div class="layer-detail"><p>${esc(tr(E, 'text'))}</p></div>
+      <h2 class="section">${t('On the map')}</h2><div class="energy-scale">${shown.map(K => row(K.color, esc(tr(K, 'label')), K.sites.length)).join('')}</div>
+      ${land ? `<h2 class="section">${esc(tr(E, 'linesTitle'))}</h2><div class="energy-scale">${E.legend.map(g => row(g.color, esc(tr(g, 'label')), g.n)).join('')}</div>` : ''}
+      ${lists.length ? `<input class="filter" type="search" placeholder="${t('Find a site')}" aria-label="${t('Find a site')}">` : ''}
+      ${lists.map(([title, list], j) => `<h2 class="section">${esc(title)}</h2><ul class="stories">${list.map((x, i) => `
+        <li data-q="${esc(`${tr(x, 'name')} ${tr(x, 'sub') || ''}`.toLowerCase())}"><button class="story" data-list="${j}" data-i="${i}">
+        <b>${esc(tr(x, 'name'))}</b>${tr(x, 'sub') ? `<span>${esc(tr(x, 'sub'))}</span>` : ''}</button></li>`).join('')}</ul>`).join('')}
+      <p class="caveat">${esc(tr(E, 'caveat'))}</p>
+      <p class="note">${t('Sources')}: ${sources.map(x => link(x.url, tr(x, 'label'))).join(' · ')}</p>`;
+    panel.querySelector('.filter')?.addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      panel.querySelectorAll('.stories li').forEach(li => { li.hidden = q && !li.dataset.q.includes(q); });
     });
+    // A strongpoint is a place to fly to; a site also opens its card.
+    panel.querySelectorAll('.story').forEach(b => b.onclick = () => {
+      const x = lists[+b.dataset.list][1][+b.dataset.i], place = !x.kind;
+      collapsePanelOnPhone();
+      flyTo(x.at[0], x.at[1], place ? null : () => pinSite(x, innerWidth * 0.62, innerHeight * 0.18), place ? 900 : 380);
+    });
+  } else if (mode === MODE.period || mode === MODE.gone) {
+    const sub = `<div class="sub" role="group" aria-label="${t('Period')}">${[MODE.period, MODE.gone].map(m => `
+      <button data-sub="${m}" aria-pressed="${m === mode}">${t(m === MODE.period ? 'Completed' : 'Torn down')}</button>`).join('')}</div>`;
+    if (mode === MODE.period) {
+      panel.innerHTML = `${sub}<h2>${t('Built in')}</h2><div class="swatches">${periods.map((p, i) => `
+        <button class="swatch" data-i="${i}" aria-pressed="${!!maskTarget[i]}">
+          <i style="background:${p.color}"></i><span>${t(p.label)}</span><span class="n">${fmt(totals[i])}</span>
+        </button>`).join('')}</div>
+        <p class="note">${t('Click a period to see it alone. Paler buildings have an approximate year.')}</p>`;
+      panel.querySelectorAll('.swatch').forEach(b => b.onclick = () => {
+        const i = +b.dataset.i, m = maskTarget;
+        const solo = m.every((v, j) => (j === i) === !!v);
+        maskTarget = periods.map((_, j) => (solo || j === i) ? 1 : 0);
+        renderPanel(); drawHist();
+      });
+    } else {
+      const gone = periods.map((_, i) => demolished.reduce((n, [, v]) => n + v[i], 0)), n = fmt(gone.reduce((a, b) => a + b, 0));
+      panel.innerHTML = `${sub}<h2>${t('Built in')}</h2><div class="energy-scale">${periods.map((p, i) => row(p.color, t(p.label), gone[i])).join('')}</div>
+        <p class="note">${LANG === 'fi' ? `Kaupungin 3D-mallin mukaan vuoden 2008 jälkeen puretut ${n} rakennusta rakennusaikansa värein; lähes kaikki on purettu vuodesta 2016 alkaen. Aikajana näyttää sen vuoden loppuun mennessä puretut, ja muut rakennukset ovat valkoisia. Vanhemmista purkamisista ei ole avointa aineistoa, mutta vanhat kartat ja ilmakuvat näyttävät, mitä paikalla oli.` : `The ${n} buildings the city's 3D model has torn down since 2008, in the colour of the period they were built in; nearly all came down from 2016 on. The timeline shows those gone by the end of its year, and every other building stands white. No open data records the demolitions before 2008, but the old maps and aerial photos show what stood.`}</p>
+        <a class="src" href="${MODEL_URL()}" target="_blank" rel="noopener">${t('Helsinki 3D city model')}, CC BY 4.0</a>`;
+    }
+    panel.querySelectorAll('.sub button').forEach(b => b.onclick = () => { uniforms.uMode.value = +b.dataset.sub; renderPanel(); drawHist(); });
   } else if (mode === MODE.floors) {
     panel.innerHTML = `<h2>${t('Storeys')}</h2>
       <div class="ramp" style="background:linear-gradient(90deg,#dbe3e6,#7da8bf,#2b5c8c,#0d1a40)"></div>
@@ -1468,7 +1719,7 @@ function renderPanel() {
         <p class="note">${LANG === 'fi' ? `HSY:n arvio vuoden sähköntuotosta, jos katon kaikki sopivat osat katettaisiin aurinkopaneeleilla (hyötysuhde 15 %). Arvio on vuodelta 2015, mutta lähes kaikille vuoden 2010 jälkeen valmistuneille se antaa nollan, joten niiltä se on jätetty pois. ${fmt(s.counts[0])} rakennuksella, valkoisina kartalla, ei ole arviota; ne ovat lähes kaikki pieniä talousrakennuksia tai vuoden 2010 jälkeen valmistuneita.` : `HSY's estimate of a year's electricity if every suitable part of the roof carried solar panels (15 % efficient). It dates from 2015 but gives nearly every building completed after 2010 zero, so those are left without one. ${fmt(s.counts[0])} buildings, white on the map, have no estimate; nearly all are small outbuildings or completed after 2010.`}</p>
         <a class="src" href="${SOLAR_URL()}" target="_blank" rel="noopener">${t('HSY solar potential')}, CC BY 4.0</a>`;
     }
-    panel.querySelectorAll('.sub button').forEach(b => b.onclick = () => { uniforms.uMode.value = +b.dataset.sub; renderPanel(); });
+    panel.querySelectorAll('.sub button').forEach(b => b.onclick = () => { uniforms.uMode.value = +b.dataset.sub; renderPanel(); drawHist(); });
   } else if (activeLayer && activeLayer === residentsLayer) {
     const notes = Object.entries(residentsLayer?.notes || {});
     const people = notes.flatMap(([bag, n]) => n.people.map(p => ({ ...p, bag, at: n.at })))
@@ -1550,6 +1801,7 @@ function setLayer(L) {
 document.querySelectorAll('.modes button[data-mode]').forEach(b => b.onclick = () => {
   if (photoOn) setPhoto(false);
   if (streetsOn) setStreets(false);
+  if (warOn) setWar(false);
   uniforms.uMode.value = +b.dataset.mode;
   markTabs();
   const bits = Array(MAX_GROUPS).fill(-1);
@@ -1580,6 +1832,7 @@ function layerGroupsShown() {
 
 function visibleCount() {
   const Y = uniforms.uYear.value;
+  if (uniforms.uMode.value === MODE.gone) return demolished.reduce((n, [y, v]) => n + (y <= Y ? v.reduce((a, b) => a + b, 0) : 0), 0);
   const shown = layerGroupsShown();
   if (shown.length) return shown.reduce((n, g) => n + Object.entries(g.years).reduce((m, [y, c]) => m + (+y <= Y ? c : 0), 0), 0);
   let n = 0;
@@ -1641,6 +1894,7 @@ function drawHist() {
   // at the end of the timeline the map shows the city as it stands, not a year that reads like a date
   document.getElementById('year').textContent = Y >= config.yearMax ? t('Today') : Math.round(Y);
   document.getElementById('count').textContent = fmt(visibleCount());
+  document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t(uniforms.uMode.value === MODE.gone ? 'torn down' : 'buildings');
 }
 
 let handle = null;
@@ -1707,11 +1961,10 @@ function applyStaticText() {
   document.querySelectorAll('.modes button[data-mode]').forEach(b => { b.textContent = t(b.dataset.label); });
   document.querySelector('.quests-open span').textContent = t('Quests');
   document.querySelector('.photo-mode').textContent = t('Aerial');
-  groundBtn.textContent = t('Old maps');
   streetsBtn.textContent = t('Street names');
+  drawPicks();
   document.querySelector('.photo-years').setAttribute('aria-label', t('Year of the aerial photos'));
-  renderGroundBox();
-  document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t('buildings');
+  drawGroundBox();
   document.querySelector('.howto').textContent = t('Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.');
   const ld = document.getElementById('loading'); if (ld.firstChild) ld.firstChild.textContent = t('Building the city') + ' ';
   playBtn.setAttribute('aria-label', t(playing ? 'Pause' : "Play the city's growth"));
@@ -1731,6 +1984,7 @@ function setLang(l) {
   applyStaticText(); renderPanel(); drawHist();
   if (pinnedGid >= 0) pinCard(pinnedGid, ...lastPin);
   else if (pinnedStreet) pinStreet(pinnedStreet, ...lastPin);
+  else if (pinnedSite) pinSite(pinnedSite, ...lastPin);
   if (quest && !questEl.hidden && !questEl.classList.contains('done')) renderQuest();
   if (questsDlg.open) renderQuestList();
 }
@@ -1761,10 +2015,13 @@ renderer.setAnimationLoop(now => {
   // ponytail: a ray into the aerial mesh costs ~15 ms close up (450k triangles), so it hovers at 5 Hz; a BVH
   // (three-mesh-bvh) would let it keep pace with the blocks' GPU pick
   if (pointer && !dragging && !(streetsOn && !photoOn) && frame % (photoOn ? 12 : 3) === 0) {
-    const gid = photoOn ? pickPhoto(pointer[0], pointer[1]) : pick(pointer[0], pointer[1]);
+    const site = pickSite(pointer[0], pointer[1]);
+    canvas.style.cursor = site ? 'pointer' : '';
+    const gid = site || warNow() ? -1 : photoOn ? pickPhoto(pointer[0], pointer[1]) : pick(pointer[0], pointer[1]);
     uniforms.uHover.value = gid;
-    showCard(gid, pointer[0], pointer[1]);
+    if (site) showSite(site, pointer[0], pointer[1]); else showCard(gid, pointer[0], pointer[1]);
   }
+  showWar();
   camera.updateMatrixWorld();
   updateGround();
   if (photoOn && photo) photo.update();

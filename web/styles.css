@@ -32,10 +32,28 @@ h1 { margin: 0; font-size: clamp(34px, 4.4vw, 56px); font-weight: 800; letter-sp
 
 /* Mode switch: a single bar, the active mode filled black. */
 .modes { position: fixed; top: calc(env(safe-area-inset-top, 0px) + var(--gutter)); left: 50%; transform: translateX(-50%);
-  display: flex; background: var(--paper); border-radius: 999px; padding: 3px; box-shadow: 0 1px 0 var(--rule); }
-.modes button { border: 0; background: none; padding: 7px 16px; border-radius: 999px; cursor: pointer; font-weight: 500; }
-.modes button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
-@media (max-width: 1180px) { .modes button { padding: 7px 11px; } }  /* clear of the masthead down to about 950 px */
+  display: flex; background: var(--paper); border-radius: 999px; padding: 3px; box-shadow: 0 1px 0 var(--rule); z-index: 6; }
+.modes button, .pick summary { border: 0; background: none; padding: 7px 16px; border-radius: 999px; cursor: pointer; font-weight: 500; }
+.modes button[aria-pressed="true"], .pick.on summary { background: var(--ink); color: var(--paper); }
+@media (max-width: 1180px) { .modes button, .pick summary { padding: 7px 11px; } }
+@media (max-width: 900px) { .modes button, .pick summary { padding: 7px 8px; } }
+/* War and Map: a menu each, opening under the bar. The map's sits last, after a rule, where Quests were. */
+.pick { position: relative; }
+.pick summary { list-style: none; white-space: nowrap; }
+.pick summary::-webkit-details-marker { display: none; }
+.pick summary::after { content: ""; display: inline-block; width: 5px; height: 5px; margin: 0 0 3px 8px; border: solid currentColor;
+  border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.pick[open] summary::after { transform: rotate(225deg); margin-bottom: 0; }
+.map-pick { margin-left: 2px; border-left: 1px solid var(--rule); }
+.map-pick summary { border-radius: 0 999px 999px 0; }
+.map-pick summary b { font-weight: 700; }
+.pick .menu { position: absolute; top: calc(100% + 8px); left: 0; min-width: 230px; background: var(--paper); border-radius: 10px;
+  padding: 6px; box-shadow: 0 10px 30px rgba(30, 40, 50, .18); }
+.map-pick .menu { left: auto; right: 0; min-width: 190px; }
+.pick .menu-head { margin: 6px 8px 3px; font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.modes .pick .menu button { display: block; width: 100%; text-align: left; padding: 6px 10px; border-radius: 6px; white-space: nowrap; }
+.modes .pick .menu button:hover { background: var(--sky); }
+.modes .pick .menu button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 
 .tally { position: fixed; top: calc(env(safe-area-inset-top, 0px) + var(--gutter)); right: var(--gutter); text-align: right; }
 .tally-year { display: block; font-size: clamp(40px, 5vw, 64px); font-weight: 800; letter-spacing: -0.04em; line-height: .85; }
@@ -186,17 +204,21 @@ h1 { margin: 0; font-size: clamp(34px, 4.4vw, 56px); font-weight: 800; letter-sp
   cursor: pointer; margin-bottom: 24px; display: grid; place-items: center; flex: none; }
 .play svg { width: 16px; height: 16px; fill: currentColor; }
 /* The aerial view is a photo: no years, colours or legend to show. A quest needs its red building, so no photo then. */
-body.photo .panel, body.photo .timeline, body.photo .tally, body.questing .photo-mode, body.questing .streets-mode { display: none; }
+body.photo .panel, body.photo .timeline, body.photo .tally, body.questing .photo-mode, body.questing .streets-mode, body.questing .war-pick, body.questing .map-pick { display: none; }
 /* Old maps on the ground, under the language switch; below the button, every map's year and the one lying there now. */
 .ground { position: fixed; right: var(--gutter); top: calc(env(safe-area-inset-top, 0px) + var(--gutter) + 124px);
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .ground button { border: 0; background: var(--paper); border-radius: 999px; padding: 4px 11px; cursor: pointer;
   font-size: 12px; font-weight: 600; color: var(--muted); }
 .ground button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
-.ground-box { width: 226px; background: var(--paper); border-radius: 10px; padding: 10px 12px; font-size: 12px; }
-.ground-box p { margin: 0; color: var(--muted); line-height: 1.35; }
-.ground-box h3 { margin: 9px 0 4px; font-size: 12px; font-weight: 700; }
+.ground-box { width: min(272px, calc(100vw - 122px));  /* clear of the phone's Street names pill */ background: var(--paper); border-radius: 10px; padding: 10px 12px; font-size: 12px; }
+.ground-box p { margin: 0 0 8px; color: var(--muted); line-height: 1.35; }
+.ground-box h3 { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+.ground-box .ground-name { margin: 8px 0 0; color: var(--ink); font-weight: 600; }
 .ground-years { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.noise-scale { display: flex; margin-top: 8px; font-size: 10px; color: var(--muted); text-align: center; }
+.noise-scale span { flex: 1; }
+.noise-scale i { display: block; height: 10px; margin-bottom: 2px; }
 .ground-box .ground-years button { padding: 3px 0; border-radius: 4px; background: var(--sky); color: var(--ink); font-weight: 500;
   font-variant-numeric: tabular-nums; }
 .ground-years button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
@@ -210,6 +232,13 @@ body.photo .ground, body.questing .ground { display: none; }
 .photo-years button { border: 0; background: none; padding: 7px 16px; border-radius: 999px; cursor: pointer; font-weight: 500; }
 .photo-years button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 body.photo .photo-years { display: flex; }
+/* Below about 1400 px the bar no longer fits between the name and the year: it moves under the name. */
+@media (min-width: 721px) and (max-width: 1400px) {
+  .dek { display: none; }
+  .modes { left: var(--gutter); transform: none; top: calc(env(safe-area-inset-top, 0px) + var(--gutter) + 60px); }
+  .lang { top: calc(env(safe-area-inset-top, 0px) + var(--gutter) + 104px); }  /* clear of the bar's end on a tablet */
+  .ground { top: calc(env(safe-area-inset-top, 0px) + var(--gutter) + 136px); }
+}
 
 .loading { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--muted); }
 
@@ -220,7 +249,7 @@ body.photo .photo-years { display: flex; }
   .tally-count { font-size: 12px; }
   .masthead, .tally { top: calc(env(safe-area-inset-top, 0px) + 14px); }
   .lang { top: calc(env(safe-area-inset-top, 0px) + 66px); }
-  .ground { top: calc(env(safe-area-inset-top, 0px) + 98px); }
+  .ground { top: calc(env(safe-area-inset-top, 0px) + 134px); }  /* under the Map pill */
   .sibling { top: calc(env(safe-area-inset-top, 0px) + 98px); }
   /* Modes: one scrolling strip above the timeline. */
   .modes { top: auto; left: 12px; right: 12px; transform: none; bottom: calc(env(safe-area-inset-bottom, 0px) + 100px);
@@ -271,9 +300,10 @@ body.photo .photo-years { display: flex; }
 
 /* Quests. The playful part of the page, in the city's own sign: every answer is worth three red crosses, the
    X X X of the arms of Amsterdam. Black and white otherwise, like the rest of the map. */
-.modes .quests-open { display: inline-flex; align-items: center; gap: 7px; margin-left: 2px; border-left: 1px solid var(--rule); border-radius: 0 999px 999px 0; }
-.modes .quests-open svg { width: 18px; height: 6px; stroke: var(--red); stroke-width: 2; stroke-linecap: round; fill: none; }
-.modes .quests-open:hover { background: #f1f3f4; }
+/* Quests: the first pill in the row of About and the languages. */
+.lang .quests-open { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); }
+.lang .quests-open svg { width: 15px; height: 5px; stroke: var(--red); stroke-width: 2; stroke-linecap: round; fill: none; }
+.lang .quests-open:hover { background: #f1f3f4; }
 .q-x { display: inline-flex; gap: 1px; font-weight: 800; font-size: 15px; line-height: 1; letter-spacing: -0.02em; }
 .q-x i { font-style: normal; color: #d8dcde; }
 .q-x i.on { color: var(--red); }
@@ -384,12 +414,17 @@ body.photo .photo-years { display: flex; }
   /* During a quest the phone shows the map and the riddle only; colour hints switch modes from the riddle itself. */
   body.questing .panel, body.questing .modes, body.questing .timeline, body.questing .lang, body.questing .tally { display: none; }
   body.questing .quest { top: calc(env(safe-area-inset-top, 0px) + 62px); max-height: 56vh; }
-  /* Quests leave the strip, so the four colourings fit without scrolling: a pill opposite the language switch. */
-  .modes .quests-open { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 66px); flex: none; margin: 0;
+  /* Quests leave the language row for a pill opposite it, so the four colourings fit without scrolling. */
+  .lang .quests-open { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 66px); flex: none; margin: 0;
     padding: 4px 11px; border: 0; border-radius: 999px; background: var(--paper); font-size: 12px; font-weight: 600; }
-  /* Aerial and Street names too, under Quests and opposite Old maps, so the four colourings fit at 360 px. */
-  .modes .photo-mode, .modes .streets-mode { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 98px); flex: none;
+  /* Aerial, Street names and War too, under Quests, so the four colourings fit at 360 px; Map opposite, under the
+     languages. */
+  .modes .photo-mode, .modes .streets-mode, .modes .war-pick, .modes .map-pick { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 98px); flex: none;
     padding: 4px 11px; font-size: 12px; font-weight: 600; background: var(--paper); }
   .modes .streets-mode { top: calc(env(safe-area-inset-top, 0px) + 130px); }
+  .modes .war-pick { top: calc(env(safe-area-inset-top, 0px) + 162px); }
+  .modes .map-pick { left: auto; right: 12px; margin: 0; border: 0; border-radius: 999px; }
+  .modes .pick { padding: 0; border-radius: 999px; }
+  .modes .pick summary { padding: 4px 11px; border-radius: 999px; font-weight: 600; }
 }
 @media (prefers-reduced-motion: reduce) { .quest .q-feedback.miss, .q-stamp { animation: none; } }
