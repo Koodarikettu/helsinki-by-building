@@ -79,7 +79,7 @@ const FI_UI = {
   'Wikidata records this building as their place of work.': 'Wikidatan mukaan henkilö työskenteli tässä.',
   'Wikidata records this building as their birthplace.': 'Wikidatan mukaan henkilö syntyi tässä.',
   'Wikidata records this building as the place where they died.': 'Wikidatan mukaan henkilö kuoli tässä.',
-  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva', 'Map': 'Kartta', 'Scale model': 'Pienoismalli', 'Under the buildings': 'Rakennusten alla', 'Old maps': 'Vanhat kartat', 'Aerial photos': 'Ilmakuvat', 'Plans': 'Kaavat', 'Noise': 'Melu',
+  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial 3D': 'Ilmakuva 3D', 'Map': 'Kartta', 'Scale model': 'Pienoismalli', 'Under the buildings': 'Rakennusten alla', 'Old maps': 'Vanhat kartat', 'Aerial photos': 'Ilmakuvat', 'Plans': 'Kaavat', 'Noise': 'Melu',
   'What Helsinki was meant to become: the city\'s master plans and their proposals.': 'Millainen Helsingistä piti tulla: kaupungin yleiskaavat ja niiden ehdotukset.',
   'Road traffic noise by day (LAeq 7–22), as each year\'s survey found it.': 'Tieliikenteen melu päivällä (LAeq 7–22) kunkin vuoden meluselvityksessä.',
   'General plan for Greater Helsinki': 'Suur-Helsingin yleissuunnitelma', 'Master plan proposal for the central city': 'Keskiosien yleiskaavaehdotus',
@@ -555,7 +555,7 @@ async function setPhoto(on) {
   document.body.classList.toggle('photo', on);
   if (on && streetsOn) setStreets(false);
   if (on && warOn) setWar(false);
-  markTabs();
+  markTabs(); drawPicks();
   showCity();
   if (on) { if (playing) stopPlay(); pinCard(-1); }
   if (on || photoLoad) (await (photoLoad ??= loadPhoto())).group.visible = photoOn;
@@ -610,8 +610,9 @@ const GROUND = [  // [year, layer, kind]
     [2022, 'Meluselvitys_2022_Helsinki_kadut_ja_maantiet_LAeq_7-22_NPM']].map(g => [...g, 'noise']),  // 2007's covers part of the city, on another scale
 ];
 const GROUND_KINDS = [['map', 'Old maps'], ['photo', 'Aerial photos'], ['plan', 'Plans'], ['noise', 'Noise']];
-// The Map menu: the scale model, the city with nothing under it, then each kind of map.
-const MAP_KINDS = [['', 'Scale model'], ...GROUND_KINDS];
+// The Map menu: the scale model, the city with nothing under it; the aerial view's 3D model in its place; then each
+// kind of map under the buildings.
+const MAP_KINDS = [['', 'Scale model'], ['aerial', 'Aerial 3D'], ...GROUND_KINDS];
 const PLAN_NAMES = { 1923: 'General plan for Greater Helsinki', 1932: 'Master plan proposal for the central city',
   1960: 'Master plan proposal', 1972: 'Revised land use for 1980', 1992: 'Master plan', 2002: 'Master plan', 2016: 'Master plan' };
 // The surveys' own colours from 40 dB up in steps of 5, as their legends draw them; 2012's go on to 80 and 85.
@@ -703,7 +704,7 @@ function updateGround() {
   }
 }
 const groundBox = document.getElementById('ground-box');
-let mapAlone = false;
+let mapAlone = false, groundFolded = false;
 function setGround(on) {
   groundOn = on;
   groundBox.hidden = !on;
@@ -713,6 +714,8 @@ function setGround(on) {
 // A kind from the Map menu: a map or photo takes the timeline to its first year when it has none so early; a plan or
 // survey starts at the latest. '' is the scale model.
 function pickGround(k) {
+  if (k === 'aerial') { setGround(false); setPhoto(true); return; }
+  if (photoOn) setPhoto(false);
   if (k === 'map' || k === 'photo') {
     groundPick = k;
     const first = GROUND.find(e => e[2] === k);
@@ -733,14 +736,15 @@ function setGroundYear(y) {
   drawHist();
 }
 // The chosen kind's years at the side: a map or photo takes the timeline to its year, a plan or survey stays put. The
-// one lying on the ground is marked, and drawn again whenever the timeline brings another.
+// one lying on the ground is marked, and drawn again whenever the timeline brings another. Its title folds it away.
 function drawGroundBox() {
   const g = groundOn && groundShown(), kind = groundKind();
   if (!kind) return;
   const focused = groundBox.contains(document.activeElement) && { ...document.activeElement.dataset };
   const top = g?.[0] === 2012 ? 10 : 8;
-  groundBox.innerHTML = `<h3>${t(GROUND_KINDS.find(([k]) => k === kind)[1])}</h3>
-    <p>${t({ plan: 'What Helsinki was meant to become: the city\'s master plans and their proposals.',
+  groundBox.classList.toggle('folded', groundFolded);
+  groundBox.innerHTML = `<button class="box-fold" data-fold="1" aria-expanded="${!groundFolded}">${t(GROUND_KINDS.find(([k]) => k === kind)[1])}</button>
+    <div class="box-body"${groundFolded ? ' hidden' : ''}><p>${t({ plan: 'What Helsinki was meant to become: the city\'s master plans and their proposals.',
       noise: 'Road traffic noise by day (LAeq 7–22), as each year\'s survey found it.' }[kind] ||
       'Pick a year, or drag the timeline: the map changes with it.')}</p>
     <div class="ground-years">${GROUND.map((e, i) => e[2] !== kind ? '' :
@@ -748,14 +752,15 @@ function drawGroundBox() {
     ${kind === 'plan' && g ? `<p class="ground-name">${t(PLAN_NAMES[g[0]])} ${g[0]}</p>` : ''}
     ${kind === 'noise' && g ? `<div class="noise-scale" aria-label="dB">${NOISE_COLORS.slice(0, top).map((c, i) =>
       `<span><i style="background:${c}"></i>${40 + 5 * i}${i === top - 1 ? '+' : ''}</span>`).join('')}</div>` : ''}
-    <label><input type="checkbox"${mapAlone ? ' checked' : ''}> ${t('Hide the buildings')}</label>`;
+    <label><input type="checkbox"${mapAlone ? ' checked' : ''}> ${t('Hide the buildings')}</label></div>`;
+  groundBox.querySelector('.box-fold').onclick = () => { groundFolded = !groundFolded; drawGroundBox(); };
   groundBox.querySelectorAll('[data-i]').forEach(b => b.onclick = () => {
     const e = GROUND[+b.dataset.i];
     if (e[2] === 'map' || e[2] === 'photo') { groundPick = e[2]; setGroundYear(e[0]); } else groundPick = e;
     drawGroundBox();
   });
   groundBox.querySelector('input').onchange = e => { mapAlone = e.target.checked; if (mapAlone) pinCard(-1); showCity(); };
-  if (focused) groundBox.querySelector(focused.i ? `[data-i="${focused.i}"]` : 'input')?.focus();
+  if (focused) groundBox.querySelector(focused.i ? `[data-i="${focused.i}"]` : focused.fold ? '.box-fold' : 'input')?.focus();
 }
 
 // ---------- Street names, then and now ----------
@@ -803,7 +808,6 @@ streetsBtn.onclick = () => setStreets(!streetsOn);
 function markTabs() {
   const m = { [MODE.solar]: MODE.energy, [MODE.gone]: MODE.period }[uniforms.uMode.value] ?? uniforms.uMode.value;
   document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !photoOn && !streetsOn && !warOn && +b.dataset.mode === m));
-  document.querySelector('.photo-mode').setAttribute('aria-pressed', photoOn);
   streetsBtn.setAttribute('aria-pressed', streetsOn);
   warPick.classList.toggle('on', warOn);
 }
@@ -923,10 +927,12 @@ function drawPicks() {
   warPick.querySelector('.menu').innerHTML = war.eras.map((E, e) => `<p class="menu-head">${esc(tr(E, 'label'))} · ${E.years}</p>${
     [null, ...E.kinds].map(K => `<button data-war="${e}:${K ? K.id : ''}" aria-pressed="${warOn && warEra === e && warKind === (K ? K.id : null)}">${
       K ? esc(tr(K, 'label')) : t('Everything')}</button>`).join('')}`).join('');
-  const k = groundKind();
+  const k = photoOn ? 'aerial' : groundKind();
+  const item = ([x, label]) => `<button data-ground="${x}" aria-pressed="${x === k}">${t(label)}</button>`;
+  mapPick.classList.toggle('on', photoOn);  // a view of its own, like War
   mapPick.querySelector('summary').innerHTML = `${t('Map')}: <b>${t(MAP_KINDS.find(([x]) => x === k)[1])}</b>`;
-  mapPick.querySelector('.menu').innerHTML = `<p class="menu-head">${t('Under the buildings')}</p>${MAP_KINDS.map(([x, label]) =>
-    `<button data-ground="${x}" aria-pressed="${x === k}">${t(label)}</button>`).join('')}`;
+  mapPick.querySelector('.menu').innerHTML = MAP_KINDS.slice(0, 2).map(item).join('') +
+    `<p class="menu-head">${t('Under the buildings')}</p>${GROUND_KINDS.map(item).join('')}`;
 }
 warPick.querySelector('.menu').onclick = e => {
   const b = e.target.closest('[data-war]');
@@ -1654,7 +1660,7 @@ function renderPanel() {
   } else if (warOn) {
     const E = war.eras[warEra], shown = warKinds(E), land = shown.some(K => K.id === 'structures');
     const lists = [...(land ? [[t('Strongpoints'), E.places]] : []), ...shown.filter(K => K.list).map(K => [tr(K, 'label'), K.sites])];
-    const sources = shown.map(K => K.source).filter((x, i, all) => all.findIndex(y => y.url === x.url) === i);
+    const sources = [...shown.map(K => K.source), ...E.sources || []].filter((x, i, all) => all.findIndex(y => y.url === x.url) === i);
     panel.innerHTML = `<h2 class="layer-title">${esc(tr(E, 'label'))}</h2>
       <p class="layer-era">${esc(E.years)}${warKind ? ` · ${esc(tr(shown[0], 'label'))}` : ''}</p>
       <div class="layer-detail"><p>${esc(tr(E, 'text'))}</p></div>
@@ -1665,7 +1671,7 @@ function renderPanel() {
         <li data-q="${esc(`${tr(x, 'name')} ${tr(x, 'sub') || ''}`.toLowerCase())}"><button class="story" data-list="${j}" data-i="${i}">
         <b>${esc(tr(x, 'name'))}</b>${tr(x, 'sub') ? `<span>${esc(tr(x, 'sub'))}</span>` : ''}</button></li>`).join('')}</ul>`).join('')}
       <p class="caveat">${esc(tr(E, 'caveat'))}</p>
-      <p class="note">${t('Sources')}: ${sources.map(x => link(x.url, tr(x, 'label'))).join(' · ')}</p>`;
+      <p class="note">${t('Sources')}: ${sources.map(x => link(tr(x, 'url'), tr(x, 'label'))).join(' · ')}</p>`;
     panel.querySelector('.filter')?.addEventListener('input', e => {
       const q = e.target.value.toLowerCase();
       panel.querySelectorAll('.stories li').forEach(li => { li.hidden = q && !li.dataset.q.includes(q); });
@@ -1813,7 +1819,6 @@ document.querySelectorAll('.modes button[data-mode]').forEach(b => b.onclick = (
   renderPanel(); drawHist();
 });
 
-document.querySelector('.photo-mode').onclick = () => setPhoto(!photoOn);
 
 // ---------- Timeline ----------
 const hist = document.getElementById('hist');
@@ -1960,7 +1965,6 @@ function applyStaticText() {
   document.querySelectorAll('[data-lang-block]').forEach(a => { a.hidden = a.dataset.langBlock !== LANG; });
   document.querySelectorAll('.modes button[data-mode]').forEach(b => { b.textContent = t(b.dataset.label); });
   document.querySelector('.quests-open span').textContent = t('Quests');
-  document.querySelector('.photo-mode').textContent = t('Aerial');
   streetsBtn.textContent = t('Street names');
   drawPicks();
   document.querySelector('.photo-years').setAttribute('aria-label', t('Year of the aerial photos'));

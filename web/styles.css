@@ -18,7 +18,8 @@ button { font: inherit; color: inherit; }
 /* Sky veils keep the masthead and the timeline legible over the model. */
 .veil { position: fixed; left: 0; right: 0; pointer-events: none; }
 .veil-top { top: 0; height: 150px; background: linear-gradient(var(--sky) 35%, rgba(228, 232, 234, 0)); }
-.veil-bottom { bottom: 0; height: 150px; background: linear-gradient(rgba(228, 232, 234, 0), var(--sky) 55%); }
+.veil-bottom { bottom: 0; height: 100px; background: linear-gradient(rgba(228, 232, 234, 0), var(--sky) 55%); }
+body.photo .veil-bottom { display: none; }  /* the aerial view runs to the edge, under its years */
 
 /* Masthead: the three crosses, then the name set large and tight. */
 .masthead { position: fixed; top: calc(env(safe-area-inset-top, 0px) + var(--gutter)); left: var(--gutter);
@@ -192,19 +193,19 @@ h1 { margin: 0; font-size: clamp(34px, 4.4vw, 56px); font-weight: 800; letter-sp
 .card .hint { margin: 0; padding: 8px 16px 12px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--rule); }
 
 /* How to move: a quiet line under the timeline's right end. */
-.howto { position: fixed; right: var(--gutter); bottom: calc(env(safe-area-inset-bottom, 0px) + 120px); color: var(--muted); background: rgba(228,232,234,.85); padding: 2px 8px; border-radius: 4px;
+.howto { position: fixed; right: var(--gutter); bottom: calc(env(safe-area-inset-bottom, 0px) + 88px); color: var(--muted); background: rgba(228,232,234,.85); padding: 2px 8px; border-radius: 4px;
   font-size: 12px; pointer-events: none; }
 @media (max-width: 720px), (hover: none) { .howto { display: none; } }
 
 .timeline { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; gap: 14px;
   padding: 0 var(--gutter) calc(env(safe-area-inset-bottom, 0px) + 14px); pointer-events: none; }
 .timeline > * { pointer-events: auto; }
-.timeline canvas { flex: 1; height: 96px; cursor: ew-resize; touch-action: none; }
+.timeline canvas { flex: 1; height: 64px; cursor: ew-resize; touch-action: none; }
 .play { width: 44px; height: 44px; border-radius: 50%; border: 0; background: var(--ink); color: var(--paper);
-  cursor: pointer; margin-bottom: 24px; display: grid; place-items: center; flex: none; }
+  cursor: pointer; margin-bottom: 20px; display: grid; place-items: center; flex: none; }
 .play svg { width: 16px; height: 16px; fill: currentColor; }
 /* The aerial view is a photo: no years, colours or legend to show. A quest needs its red building, so no photo then. */
-body.photo .panel, body.photo .timeline, body.photo .tally, body.questing .photo-mode, body.questing .streets-mode, body.questing .war-pick, body.questing .map-pick { display: none; }
+body.photo .panel, body.photo .timeline, body.photo .tally, body.questing .streets-mode, body.questing .war-pick, body.questing .map-pick { display: none; }
 /* Old maps on the ground, under the language switch; below the button, every map's year and the one lying there now. */
 .ground { position: fixed; right: var(--gutter); top: calc(env(safe-area-inset-top, 0px) + var(--gutter) + 124px);
   display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
@@ -213,7 +214,14 @@ body.photo .panel, body.photo .timeline, body.photo .tally, body.questing .photo
 .ground button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .ground-box { width: min(272px, calc(100vw - 122px));  /* clear of the phone's Street names pill */ background: var(--paper); border-radius: 10px; padding: 10px 12px; font-size: 12px; }
 .ground-box p { margin: 0 0 8px; color: var(--muted); line-height: 1.35; }
-.ground-box h3 { margin: 0 0 4px; font-size: 13px; font-weight: 700; }
+/* The box's title folds it to itself and back. */
+.ground-box .box-fold { display: flex; align-items: center; justify-content: space-between; width: 100%; margin: 0 0 4px;
+  padding: 0; border-radius: 0; background: none; color: var(--ink); font-size: 13px; font-weight: 700; text-align: left; }
+.ground-box .box-fold::after { content: ""; width: 7px; height: 7px; margin: 3px 2px 0 12px; border: solid var(--muted);
+  border-width: 0 2px 2px 0; transform: rotate(225deg); }
+.ground-box.folded { width: auto; }
+.ground-box.folded .box-fold { margin: 0; }
+.ground-box.folded .box-fold::after { transform: rotate(45deg); margin-top: -3px; }
 .ground-box .ground-name { margin: 8px 0 0; color: var(--ink); font-weight: 600; }
 .ground-years { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
 .noise-scale { display: flex; margin-top: 8px; font-size: 10px; color: var(--muted); text-align: center; }
@@ -266,6 +274,7 @@ body.photo .photo-years { display: flex; }
   .card .photo img { border-radius: 14px 14px 0 0; max-height: 190px; }
   .timeline { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); }
   .timeline canvas { height: 76px; }
+  .veil-bottom { height: 150px; }  /* over the strip of modes too */
   .play { width: 40px; height: 40px; margin-bottom: 18px; }
 }
 }
@@ -417,12 +426,11 @@ body.photo .photo-years { display: flex; }
   /* Quests leave the language row for a pill opposite it, so the four colourings fit without scrolling. */
   .lang .quests-open { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 66px); flex: none; margin: 0;
     padding: 4px 11px; border: 0; border-radius: 999px; background: var(--paper); font-size: 12px; font-weight: 600; }
-  /* Aerial, Street names and War too, under Quests, so the four colourings fit at 360 px; Map opposite, under the
+  /* Street names and War too, under Quests, so the four colourings fit at 360 px; Map opposite, under the
      languages. */
-  .modes .photo-mode, .modes .streets-mode, .modes .war-pick, .modes .map-pick { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 98px); flex: none;
+  .modes .streets-mode, .modes .war-pick, .modes .map-pick { position: fixed; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 98px); flex: none;
     padding: 4px 11px; font-size: 12px; font-weight: 600; background: var(--paper); }
-  .modes .streets-mode { top: calc(env(safe-area-inset-top, 0px) + 130px); }
-  .modes .war-pick { top: calc(env(safe-area-inset-top, 0px) + 162px); }
+  .modes .war-pick { top: calc(env(safe-area-inset-top, 0px) + 130px); }
   .modes .map-pick { left: auto; right: 12px; margin: 0; border: 0; border-radius: 999px; }
   .modes .pick { padding: 0; border-radius: 999px; }
   .modes .pick summary { padding: 4px 11px; border-radius: 999px; font-weight: 600; }

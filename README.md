@@ -14,7 +14,8 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
 - **The building's card.** Use, height, floors, structure and facade, architect and style, the Wikipedia extract,
   the City Museum's photos of it through the years, its energy label and solar potential, and why its street is so
   named.
-- **Aerial view.** The city's photogrammetric 3D model from its 2017 or 2024 aerial photos, in the same scene.
+- **Aerial 3D.** The city's photogrammetric 3D model from its 2017 or 2024 aerial photos, in the same scene, from the
+  Map menu.
 - **Street names.** The streets laid on the ground and the buildings faded: streets that once had another name are
   blue, and a click on one gives its former names and the history they were read from.
 - **War.** A view of each world war. The first: the land front Russia built around the city in 1914–1918, trench by
@@ -192,7 +193,8 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
 - **Map layers.** The Map menu, last in the bar (where Quests were; they moved beside About), lays a map under the
   buildings, streamed from the city's WMS (`kartta.hel.fi/ws/geoserver/avoindata/wms`, ETRS-GK25) in a quadtree of
   512 px tiles that splits where its pixels would show larger than the screen's. Its default, Scale model (Pienoismalli),
-  is the white city with nothing under it; each other kind opens a box at the side with a button for each year. Old maps and
+  is the white city with nothing under it, and Aerial 3D the aerial view below; each kind under the buildings opens a
+  box at the side with a button for each year, which its title folds away. Old maps and
   orthophotos follow the timeline, the one of its year or the nearest before it; a click on a year takes the timeline
   there. Maps: 1749, 1780, 1820, 1838, 1870, 1878, 1900, 1909, 1917, 1925, 1940, 1952 and 1962 (the last three, like
   1917, show the centre only), and the guide maps (`Opaskartta_*`) of 1965, 1966, 1971, 1975, 1977, 1979, 1983,
@@ -206,7 +208,7 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   it is not clear, with a legend of the surveys' own colours (the server's own legend reads 55 for 65). The maps are
   georeferenced: Senaatintori falls on the square in each. The buildings and today's street names can be hidden to
   see a map alone.
-- **Aerial view.** The Aerial mode streams the city's photogrammetric mesh from its 2017 or 2024 aerial photos
+- **Aerial view.** Aerial 3D, in the Map menu, streams the city's photogrammetric mesh from its 2017 or 2024 aerial photos
   (`kartta.hel.fi/3d/mesh/Helsinki_2017/`, `Helsinki_2024/2/`, 3D Tiles) into the same scene with
   [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS); nothing is downloaded by the pipeline. The
   globe is turned to east, up and south at Senaatintori and by the grid's meridian convergence (−0.041°), which keeps

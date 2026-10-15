@@ -92,6 +92,11 @@ REGISTER = dict(label="Finnish Heritage Agency, register of ancient and historic
 MUSEUM = dict(label="Helsinki City Museum, in Finna", label_fi="Helsingin kaupunginmuseo, Finna", url="https://www.finna.fi")
 ART = dict(label="HAM Helsinki Art Museum, public art, through the Service Map", label_fi="HAM, julkiset taideteokset, Palvelukartta",
            url="https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta")
+# The city's own account of the raids of 1944, with its air defence in numbers.
+HISTORY = dict(label="City of Helsinki, Helsinki's history: the great raids of 1944",
+               label_fi="Helsingin kaupunki, Helsingin historia: suurpommitukset 1944",
+               url="https://historia.hel.fi/en/kaannekohdat/20th-century/the-great-raids-against-helsinki-1944",
+               url_fi="https://historia.hel.fi/fi/kaannekohdat/1900-luku/helsingin-suurpommitukset-1944")
 SURVEY = dict(label="City of Helsinki, First World War fortifications (survey of 1996)",
               label_fi="Helsingin kaupunki, ensimmäisen maailmansodan aikaiset maalinnoitukset (kartoitus 1996)",
               url="https://hri.fi/data/fi/dataset/helsingin-ensimmaisen-maailmansodan-aikaiset-maalinnoitukset")
@@ -280,18 +285,25 @@ def main():
                     kind("memorials", "Memorials of 1918", "Vuoden 1918 muistomerkit", mem[0], ART)]),
         dict(id="ww2", label="Second World War", label_fi="2. maailmansota", years="1939–1945",
              text=("In the Winter War and the Continuation War Soviet bombers struck Helsinki again and again, hardest in "
-                   "the great raids of February 1944, and anti-aircraft batteries ringed the city. The register's sites "
-                   "are the batteries and other defences it dates to the war; the City Museum's photos show the bomb "
+                   "the great raids of February 1944. By then the city's air defence had 13–15 heavy anti-aircraft "
+                   "batteries with 77 guns, 41 light guns, 36 searchlights, 13 sound locators and three coastal "
+                   "anti-aircraft batteries on the islands. Only a few of their sites are in the heritage register, those "
+                   "whose remains it has surveyed: they are the dots here. The City Museum's photos show the bomb "
                    "damage, and the memorials remember the dead."),
              text_fi=("Talvi- ja jatkosodassa Neuvostoliiton pommikoneet hyökkäsivät Helsinkiin yhä uudelleen, rajuimmin "
-                      "helmikuun 1944 suurpommituksissa, ja kaupunkia ympäröivät ilmatorjuntapatterit. Rekisterin kohteet "
-                      "ovat sen sotaan ajoittamat patterit ja muut varustukset; kaupunginmuseon kuvat näyttävät "
-                      "pommitusten tuhot, ja muistomerkit muistavat kuolleita."),
-             caveat=("The register dates few sites to the war, and most batteries are gone. A photo stands at the address "
-                     "the museum gives it; photos with no house number are left out."),
-             caveat_fi=("Rekisteri ajoittaa sotaan vain harvoja kohteita, ja useimmat patterit ovat kadonneet. Kuva on museon "
-                        "sille antamassa osoitteessa; kuvat ilman talonnumeroa on jätetty pois."),
-             kinds=[kind("register", "Anti-aircraft batteries and other defences", "Ilmatorjuntapatterit ja muut varustukset", reg[1], REGISTER),
+                      "helmikuun 1944 suurpommituksissa. Silloin kaupungin ilmapuolustuksessa oli 13–15 raskasta "
+                      "ilmatorjuntapatteria ja niissä 77 tykkiä, 41 kevyttä it-tykkiä, 36 valonheitintä, 13 kuulosuunninta "
+                      "sekä kolme rannikkoilmatorjuntapatteria saarilla. Muinaisjäännösrekisterissä on vain harvat niiden "
+                      "paikoista, ne joiden jäänteet on inventoitu: ne ovat kartan pisteet. Kaupunginmuseon kuvat "
+                      "näyttävät pommitusten tuhot, ja muistomerkit muistavat kuolleita."),
+             caveat=("Most batteries were temporary and are gone or built over; the city's archaeological inventory of "
+                     "2024–2025 is still adding sites to the register. A photo stands at the address the museum gives it; "
+                     "photos with no house number are left out."),
+             caveat_fi=("Useimmat patterit olivat tilapäisiä, ja ne ovat kadonneet tai jääneet rakennusten alle; kaupungin "
+                        "arkeologinen inventointi 2024–2025 lisää rekisteriin yhä kohteita. Kuva on museon sille antamassa "
+                        "osoitteessa; kuvat ilman talonnumeroa on jätetty pois."),
+             sources=[HISTORY],
+             kinds=[kind("register", "Defences in the heritage register", "Rekisteriin kirjatut varustukset", reg[1], REGISTER),
                     kind("photos", "Bomb damage", "Pommitusten tuhot", pho[1], MUSEUM),
                     kind("memorials", "Memorials", "Muistomerkit", mem[1], ART)]),
     ]
