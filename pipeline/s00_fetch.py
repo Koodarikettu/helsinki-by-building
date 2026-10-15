@@ -1,7 +1,7 @@
 """Download the open data into data/raw/: Helsinki's WFS layers, the heights of its 3D city model and the buildings
 it records as demolished, Museovirasto's RKY areas, HSY's solar potential, the public energy certificates, Wikidata's
 buildings, the Helsinki City Museum's photos in Finna, the land front of 1914–1918, Museovirasto's register of
-ancient and historic remains and the city's public art.
+ancient and historic remains, the city's public art and its parking fines.
 
 Each WFS layer comes whole in one GetFeature request (no paging); the check below fails if a server ever caps it.
 Licences: see README.
@@ -31,6 +31,7 @@ LAYERS = [  # (server, layer, extra parameters); saved as data/raw/<layer name>.
     (HEL, "avoindata:Maalinnoitus_kohteet", {}),                     # the land front of 1914–1918: lines,
     (HEL, "avoindata:Maalinnoitus_yksikot", {}),                     # its structures,
     (HEL, "avoindata:Maalinnoitus_rajaukset", {}),                   # and its strongpoints' outlines
+    (HEL, "avoindata:Pysakointivirheet", {}),                        # parking fines, by address and month
     (MV, "rajapinta_suojellut:muinaisjaannos_piste", MV_HELSINKI),   # ancient and historic remains
     (MV, "rajapinta_suojellut:muu_kulttuuriperintokohde_piste", MV_HELSINKI),  # other heritage sites
     (MV, "rajapinta_suojellut:rky_alue", NATIONAL),                  # RKY areas
@@ -80,6 +81,14 @@ FINNA_MV_PARAMS = [("lookfor", "Helsinki"), ("filter[]", 'building:"0/Museoviras
                    ("filter[]", 'usage_rights_str_mv:"usage_B"'), ("limit", 100), ("sort", "id asc")] + \
     [("field[]", f) for f in ("id", "title", "year", "images", "imageRights", "nonPresenterAuthors", "subjectPlaces", "geoLocations",
                               "buildings")]  # the collection, which the licence asks to credit
+
+
+# The Defence Forces' photos of the Second World War (SA-kuva, the Military Museum's archive, CC BY 4.0) that name
+# Helsinki, about 10,000; s11_war puts those whose title names a place it can find in the War view.
+FINNA_SA_PARAMS = [("lookfor", "Helsinki"), ("filter[]", 'building:"0/SA-kuva/"'), ("filter[]", 'format:"0/Image/"'),
+                   ("limit", 100), ("sort", "id asc")] + \
+    [("field[]", f) for f in ("id", "title", "year", "images", "imageRights", "nonPresenterAuthors", "subjectPlaces", "subjects",
+                              "geoLocations")]
 
 
 def fetch_finna(out: Path, params=FINNA_PARAMS):
@@ -245,6 +254,21 @@ def fetch_public_art(out: Path):
     print("public art", d["count"])
 
 
+# The parking fines of the years before 2023, which the WFS does not serve: the city's yearly files on HRI (CC BY 4.0),
+# into data/raw/fines/ for s12_other.
+FINES = "https://www.hel.fi/hel2/tietokeskus/data/helsinki/hkr/"
+FINE_FILES = ["Pysakointivirheet_2014-17.csv", "Pysakointivirheet_2018-.csv"] + [f"Pysakointivirheet_{y}.csv" for y in range(2019, 2023)]
+
+
+def fetch_fines(out: Path):
+    out.mkdir(exist_ok=True)
+    for name in FINE_FILES:
+        r = requests.get(FINES + name, headers=UA, timeout=600)
+        r.raise_for_status()
+        (out / name).write_bytes(r.content)
+    print("parking fine files", len(FINE_FILES))
+
+
 def main():
     out = Path("data/raw")
     out.mkdir(parents=True, exist_ok=True)
@@ -259,9 +283,11 @@ def main():
     fetch_demolished(out / "demolished")
     fetch_finna(out / "finna_hkm.jsonl")
     fetch_finna(out / "finna_mv.jsonl", FINNA_MV_PARAMS)
+    fetch_finna(out / "finna_sa.jsonl", FINNA_SA_PARAMS)
     fetch_public_art(out / "public_art.json")
     fetch_register(out)
     fetch_trams(out / "ohm_trams.json")
+    fetch_fines(out / "fines")
 
 
 if __name__ == "__main__":

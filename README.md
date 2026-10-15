@@ -2,15 +2,16 @@
 
 Every building in Helsinki, 85,000 of them, coloured by the year it was completed. What the map shows:
 
-- **Colourings.** By the period a building was completed, by its floors, by its energy label, or by how much solar
-  power its roof could give.
+- **Colourings.** By the period a building was completed, by its floors, by its energy label, by how much solar
+  power its roof could give, or by the heat source the building register records for it.
 - **Back in time.** The timeline plays the city's growth. Go back and the 4,800 buildings demolished since 2008 stand
   again, paler; the Torn down view shows them all at once in the colour of their age. The city's old maps
   (1749 to today) and aerial photos (1932–2025) can lie under the buildings, or be seen alone with the buildings hidden.
 - **What Helsinki was meant to become.** The city's master plans and their proposals from 1923 to 2016 on the ground,
   and its road traffic noise as surveyed in 2012, 2017 and 2022.
 - **Context layers.** The protection the city's plans give a building, the national heritage areas (RKY) it stands
-  in, and the buildings in Wikipedia.
+  in, the buildings in Wikipedia, and who lived here: the homes of well-known people whose Finnish Wikipedia article
+  names their Helsinki address, each with the sentence it says so in.
 - **The building's card.** Use, height, floors, structure and facade, architect and style, the Wikipedia extract,
   the City Museum's photos of it through the years, its energy label and solar potential, and why its street is so
   named.
@@ -20,10 +21,12 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   blue, and a click on one gives its former names and the history they were read from.
 - **War.** A view of each world war. The first: the land front Russia built around the city in 1914–1918, trench by
   trench as the city surveyed it in 1996, and the damage of the capture of Helsinki in 1918 in the City Museum's
-  photos. The second: the anti-aircraft batteries and the bomb damage of 1939–1944. For both, the defences in
-  Museovirasto's register and the memorials, each site with a card.
+  photos. The second: the anti-aircraft batteries, the bomb damage of 1939–1944 and the Defence Forces' own photos of
+  the city at war (SA-kuva) at the places they name. For both, the defences in Museovirasto's register and the
+  memorials, each site with a card.
 - **Other.** The city's 475 works of public art, coloured by period; the tram network of the timeline's year, with the
-  tracks closed before it in grey; and the Finnish Heritage Agency's photos of Helsinki at the places they name.
+  tracks closed before it in grey; the Finnish Heritage Agency's photos of Helsinki at the places they name; and the
+  parking fines of 2014–2023, street by street and year by year, with their commonest reasons.
 - **Quests.** Find buildings from riddles and old photos, and guess their age with the colours switched off.
 
 A non-commercial project, made for curiosity and learning. It is a fork of Alexander Barakov's
@@ -73,26 +76,27 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 
 | Step | What it does |
 |---|---|
-| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram tracks, the public energy certificates, Wikidata's buildings, the City Museum's and the Heritage Agency's photos in Finna and the city's public art |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram tracks, the public energy certificates, Wikidata's buildings, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna and the city's public art |
 | `s01_load` | Buildings, standing and demolished → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's or the model's feature id) |
 | `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
-| `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes, addresses and the city config |
+| `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes (the heat source among them), addresses and the city config |
 | `s04_water` | Water and land polygons |
-| `s05_layers` | Context layers: protected in the local plan, RKY areas, buildings in Wikipedia; a bit per group per building |
+| `s05_layers` | Context layers: protected in the local plan, RKY areas, buildings in Wikipedia, who lived here; a bit per group per building |
 | `s06_wiki` | Names, architects, styles, Wikipedia extracts and Commons photos for buildings with a Wikidata item |
 | `s07_labels` | Street names placed along their street areas; why each street is so named and its former names; the street areas for the Street names view |
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 | `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
-| `s12_other` | The Other menu: public art by period, the tram tracks through time (`trams.bin`) and the Heritage Agency's photos by place (`other.json`) |
-| `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage and the war memorials (`war.json`) |
+| `s12_other` | The Other menu: public art by period, the tram tracks through time (`trams.bin`), the Heritage Agency's photos by place (`other.json`) and the parking fines by street and year (`fines.json`, loaded when the view opens) |
+| `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`) and the war memorials (`war.json`) |
+| `s13_residents` | Well-known people at the Helsinki addresses their Finnish Wikipedia articles name, and Wikidata's links from people to buildings (`data/residents.json`, for `s05_layers`) |
 
 ## Run it
 
 ```bash
 uv sync
-for s in s00_fetch s01_load s02_attributes s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war s12_other; do uv run python -m pipeline.$s; done
-uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11 && uv run python -m pipeline.test_s12   # years, street names, addresses, energy, war, photos
+for s in s00_fetch s01_load s02_attributes s13_residents s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war s12_other; do uv run python -m pipeline.$s; done
+uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11 && uv run python -m pipeline.test_s12 && uv run python -m pipeline.test_s13   # years, street names, addresses, energy, war, photos and fines, residents
 python3 -m http.server 8642 --directory web
 ```
 
@@ -139,22 +143,41 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   buildings, 14 of them demolished. Most give a name and a completion year (which matches the register for 3,513 of 4,245 buildings; 148
   differ by more than ten years, mostly the register being later; not used). Extracts are the article's
   introduction cut at 450 characters. Oodi has no linked item: its Wikidata item carries no VTJ-PRT for this building.
+- **Who lived here.** `s13_residents` takes the 10,324 people Wikidata ties to Helsinki (born, died, lived or worked
+  there) who have a Finnish Wikipedia article, and reads each article sentence by sentence. A sentence places its person
+  at an address when it is about living, moving, being born, dying or working somewhere (asui, muutti, syntyi, kuoli,
+  kotonaan, ateljee …) and not about a burial or about designing or building a house, names its person (the surname,
+  in any case, or hän/he), names a street of Helsinki's address register with a house number, Helsinki or one of its
+  districts is named in it or the three sentences before, and no other town in it: many towns have a Kauppakatu. Only
+  217 sentences in the 10,324 articles name a Helsinki address at all. The other way round, the Finnish articles of the
+  219 buildings Wikidata links by VTJ-PRT give the people linked in a sentence about living there ("Talossa asuivat mm.
+  …"), when the sentence names the house and not a neighbour's, and the person is not named as someone's kin or in the
+  genitive ("Bobrikovin leikannut kirurgi"), unless as their home ("Leinon koti"). Wikidata's own links from a person
+  to a building add residences and places of work; its birth and death places, nearly all hospitals, are left out. A
+  person is named as their article names them (Annie Edelfelt, not Wikidata's Alexandra), and the card quotes the
+  sentence. 77 people at 62 buildings; a first pass gave 114, of which a reading by hand found about one in five wrong
+  (architects, buyers, a neighbour, a party guest, a sentence about another house), which the rules above now leave
+  out. Searching the articles for every street name too, as Amsterdam's map does, ran into Wikimedia's rate limits.
 - **Street names.** From the street areas of the register of public areas, placed as in Amsterdam: tier 1 (shown from
   afar) is the register's own class for main streets and motorways; streets not yet built are left out. Why a street
   is so named comes from the city's place-name register (`Nimisto_piste_rekisteritiedot`): its reason for the name
   and, for many, an older history of it, in Finnish only. 3,565 of the streets in the buildings' addresses or the
   street areas have one; a pinned card shows it for the street of the building's address.
 - **Former street names.** The register keeps no earlier names as records of their own; they live only in its
-  histories, mixed with proposals never adopted and with other streets' names. They were read out of the 3,560
-  histories once by a language model (Claude), told to keep only names this street itself carried, never a proposal,
-  a draft plan's name or another street's, and kept in `pipeline/former_names.json`: 1,069 names for 562 streets and
-  places, with when the text says each was used. Cases the reading itself flagged as unsure were left out, as were
-  forms that differ from today's name only by spaces or capitals (Freds Gatan for Fredsgatan); Hämeentie was corrected
-  by hand, since its history begins with the old Tavastgatan on today's Snellmaninkatu. `s07_labels` keeps a name only
-  while it stands word for word in its street's text, so a name read wrong cannot be one the text does not contain.
-  The Street names view lays the 7,270 street areas on the ground, the 488 streets with a former name in blue, and
-  fades the buildings, which then take no clicks; a click on a street opens its names, its reason and the full history
-  they were read from.
+  histories, mixed with proposals never adopted and with other streets' names. They were read out of the histories by a
+  language model (Claude), 2,658 streets and places whose text names another name, in eight batches read whole: a
+  former name is one this same street carried before, in Finnish or Swedish, an official name or one confirmed in a
+  plan and later changed, or a spelling that differs in its letters. Not one: a street joined to it ("Katu ulotettiin
+  1953 käsittämään myös … Kalmistokadun": Kalmistokatu was never Mechelininkatu's name), a street it was split from or
+  was part of ("Osa entistä Sörnäisten laituria"), a name another street bore (the old Tavastgatan of Hämeentie's
+  history ran on today's Snellmaninkatu, and is Snellmaninkatu's), a proposal or a draft plan's name, a name only part
+  of the street carried, a form differing from today's only by spaces or capitals (Freds Gatan for Fredsgatan), and
+  anything the reading was unsure of. A first reading had taken joined and split streets for former names; read again,
+  835 names for 458 streets and places remain: 248 of the first reading's are left out, 14 are new. Each name in
+  `pipeline/former_names.json` carries when the text says it was used and the passage that shows it, and `s07_labels`
+  keeps it only while that passage stands word for word in its street's text and names it. The Street names view lays
+  the 7,270 street areas on the ground, the 389 streets with a former name in blue, and fades the buildings, which
+  then take no clicks; a click on a street opens its names, its reason and the full history they were read from.
 - **Energy labels.** Varke's energy certificate register publishes every certificate in force as one CSV
   (146,383 in Finland); those of houses with one or two homes are not public. Matched by VTJ-PRT: 14,987 buildings,
   the one signed last where a building has several. The register offers the file for anyone to download but states no
@@ -165,6 +188,16 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   point falls in, and several in one add up. Its outlines are newer than its estimates, which give zero to nearly
   every building completed after 2010 (2009: 28 %, as across the city; 2012: 69 %; 2015: 96 %), so those get none:
   43,898 buildings have an estimate, 30,046 above zero. Coloured in steps of 5, 10, 25, 50, 100, 250 and 500 MWh.
+- **Heat source.** The register's main heat source (`c_poltaine`, Helsinki's list RA_LAMMONLAHDE) and heating method
+  (`c_lammtapa`, RA_LAMMITYSTAPA). The city's metadata says both are taken from the notice filed when a building is
+  built, and that for buildings completed before 1981 they may be missing or wrong: it records what a building was
+  built to be heated with, not necessarily what heats it now (651 buildings are still down as coal-heated, the median
+  of their years 1954). The colouring groups the sources in five, so that their colours stay apart for colour-blind
+  eyes too (checked with a palette validator, every pair, on the land's colour): district heating (28,090 standing
+  buildings), electricity (9,992), ground-source heat (3,742), oil, light or heavy (3,495), and wood, coal, gas, peat or other
+  (2,343). 37,297 have none recorded: 33,120 of them are not linked to the register at all, and 84 % are storehouses,
+  sheds, outbuildings, summer cottages and garages. A click in the legend shows one source alone; the card gives the
+  exact source and the method.
 - **Archive photos.** All of the Helsinki City Museum's images in Finna are downloaded (about 83,000 records, 834
   pages) and matched by the address that ends their place (`subjectPlaces`), rather than searched address by address:
   a free-text search for "Aleksanterinkatu 52" returns hundreds of loose hits, while the place field names the
@@ -200,6 +233,19 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   the city's 475 public artworks in the Service Map (the ids and names in `s11_war.py`), the Civil War of 1918 with the
   first war, with HAM's text shortened to its first sentences; the photos are not openly licensed, so the card links
   the Service Map instead. Wikidata types Helsinki's memorials as plain memorials, which is why it is not used.
+  The city at war: the Defence Forces' photo archive (SA-kuva, the Military Museum's, CC BY 4.0) has 10,146 photos of
+  1939–1945 in Finna that name Helsinki, nearly all with no place but the city. A photo is placed when its own place
+  or its title names an address the city's address points know, a building Wikidata names or a spot in the place-name
+  register, in any case form ("Silakoita Kauppatorilla", "Asemiesilta Kansallisteatterissa"): the forms are made for
+  each name, with the consonant changes of its last word (katu → kadulla, saari → saaressa), and a form two places
+  share finds neither. A district is too coarse and finds nothing, and so do eight names that are ordinary words or
+  people's names in the titles (Prinssi, Sauna) or a town as well (Loppi). 1,562 photos at 195 places; the commonest
+  places the archive names, the Messuhalli and the naval station, are in neither list, and are left out. Finna has
+  no smaller size of the archive's photos than the originals, 4,900 px and 4–8 MB each, but scales one down when
+  asked for a width (`w=600`, some 70 KB), as the map asks for every Finna photo; a photo Finna has not served before
+  still takes it 3–6 s, while it fetches the original from the archive. So a card loads its photo when it is pinned,
+  not on a hover, and while it is open fetches the three photos after the one shown and the two before; the photo
+  shown fades until the next has come.
 - **Other.** A menu like War's, of views that lie on the ground (`s12_other`): public art, every work of the city's
   public art in the Service Map coloured by the period of the year in its credit ("Artist: Title, 1970"; 79 give
   none); the trams, OpenHistoricalMap's tram tracks (CC0, drawn by volunteers) with the years each opened and closed
@@ -211,6 +257,37 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   the city or a district and are left out. One dot per place; the page carries each place's first photo, and its card
   loads all of them from one of 32 shards (`mvphotos/<nn>.json`, keyed by a CRC-32 of the place's name), oldest first,
   each crediting its photographer and collection, with a button for each decade past a dozen photos.
+  The parking fines: the city's register of parking violations (Pysäköintivirheet Helsingissä, CC BY 4.0), 2023 from
+  the WFS and 2014–2022 from its yearly files (`data/raw/fines/`), 139,000–166,000 fines and notices a year by the
+  parking inspectors and the police. These are all the years there are: the data begin in January 2014, and the WFS,
+  which was to carry the years from 2023 on, stops at 2023 (HRI's record last changed on 13 September 2024). Each fine
+  is counted on the street of its address, matched to the street areas of the street-name view by name, letting
+  capitals, spaces, hyphens, apostrophes and acute accents differ ("Kolmas linja" and "Kolmas Linja",
+  "Katajanokanlaituri" and "Katajanokan laituri", "Castréninkatu" and "Castreninkatu"; not ä, ö or å) and dropping a
+  square's "(tori tai aukio)". 3–7 % a year have no address or one the street areas lack (parks, stations, and streets
+  such as Kalliosaarenkuja, Hammarskjöldintie and Kruununhaankatu that are not among them), and are left out, as are
+  the 2023 fines the register marks as not at their real place (`todellinen_sijainti`; 2,565 of them under the parking
+  control's own address in Pasila; the years before carry no such mark, and that address has 8–104 fines a year).
+  Checked by counting again from the raw files with another reader (pandas): all 33,150 street-years agree, and each
+  file's rows are its lines.
+  A street is coloured by its fines in the timeline's year in seven steps (1, 10, 25, 50, 100, 250 and 500+), the more
+  the redder, as noise maps go from quiet to loud: one hue from salmon to a deep red, each step clearly darker, the
+  lightest clearing the land at 2:1 (dataviz validator, ordinal); a street with none is a pale grey. In this view the
+  timeline holds to 2014–2023, a bar a year as tall as its fines, and the tally counts them; the buildings can be
+  hidden. A card gives a street's fines year by year and the year's three commonest main reasons, in Finnish, codes
+  cut off; the reasons are the register's own words, and a few are qualifiers rather than reasons ("Ei koske
+  kuormaavia …").
+  A long street gathers more fines than a short one, so the view also colours them per 100 m, in steps of under 2, 2,
+  5, 10, 25, 50 and 100+. A street's length is the sum of its built street areas' own lengths (`pituus`), or an area's
+  size over its mean width where it gives none. Cycle and foot ways and parking areas (1,954 areas) run beside the
+  carriageway rather than along it, and count only for a street that is nothing else: added in, Eteläinen
+  Rautatiekatu would run 1,960 m rather than 636. Mannerheimintie comes to 6.0 km, Fredrikinkatu 1.5 km,
+  Haartmaninkatu 343 m; 16 fined streets have no length and stay grey. Checked against the city's road centrelines
+  (`Liikennevaylat`, the street ones whose middle lies in a street's areas): the median ratio is 0.98, half the
+  streets within 0.93–1.01, and 88 % of the streets fined in 2023 within a factor of 1.5; the rest are mostly streets
+  whose centrelines miss a pedestrian stretch (Mikonkatu) or run twice along a divided road. A stub of a few metres
+  with a few fines would top the ranking, so per 100 m the panel ranks only streets of 100 m or more. `fines.json`
+  (600 KB) comes when the view first opens.
 - **Quests.** Three walks (easy, medium, hard) in `pipeline/quests.py`, written for this map. `s09_quests` drops any
   step whose claims are not word for word in its Wikipedia article, whose place is not found, or whose year is not
   the map's year for the building. The hard walk uses 1800s photos from the City Museum as clues; Oodi, Kiasma and the
@@ -285,6 +362,12 @@ Data keeps the licence of its source:
   register (`kyppi.fi`) for its dating and description. CC BY 4.0.
 - War damage: Helsinki City Museum's photos in Finna (as for the archive photos), public domain (PDM).
 - Tram tracks: [OpenHistoricalMap](https://www.openhistoricalmap.org/), CC0.
+- Parking fines: City of Helsinki, [Pysäköintivirheet Helsingissä](https://hri.fi/data/fi/dataset/pysakointivirheet-helsingissa),
+  WFS layer `Pysakointivirheet` (2023) and the yearly CSV files of 2014–2022. CC BY 4.0.
+- The city at war: SA-kuva, the Military Museum's photo archive, in [Finna](https://www.finna.fi), CC BY 4.0, which asks
+  that SA-kuva is named as the source; each card does, with the photographer where the archive knows them.
+- Who lived here: Finnish Wikipedia, the sentence of each article that names the address (CC BY-SA 4.0, quoted and
+  linked to the article), and Wikidata (CC0).
 - Heritage Agency photos: Finnish Heritage Agency (Museovirasto) collections in [Finna](https://www.finna.fi), CC BY 4.0;
   each card credits the photographer and the collection.
 - War memorials: HAM Helsinki Art Museum's public art through the city's [Service Map](https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta)

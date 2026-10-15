@@ -14,15 +14,21 @@ whose description opens by saying so ("Ensimmäisen maailmansodan aikainen luola
 land front's strongpoints are left to the city's survey, which draws them.
 
 Photos: the Helsinki City Museum's in Finna (s00_fetch), from the war's years, of bomb or battle damage at an address
-that the city's address points place; one dot per address. Memorials: works of the city's public art (the Service
-Map; HAM's texts CC BY 4.0, its photos not open), picked by hand below.
+that the city's address points place; one dot per address. And the Defence Forces' photos of 1939–1945 (SA-kuva, the
+Military Museum's archive, CC BY 4.0) whose title or place names an address, a building or a spot in the city, inflected
+or not ("Silakoita Kauppatorilla", "Asemiesilta Messuhallissa"); a district is too coarse and is left out. One dot per
+place; its photos come from shards (web/data/saphotos/<nn>.json) when its card opens.
+Memorials: works of the city's public art (the Service Map; HAM's texts CC BY 4.0, its photos not open), picked by hand
+below.
 
 Writes web/data/war.json and web/data/trenches.bin:
   u32 nLines, u32 nVerts, u32 start[nLines + 1], u8 state[nLines] (padded to 4), f32 xz[2 * nVerts] (local frame).
 """
+import csv
 import html
 import json
 import re
+import zlib
 from collections import Counter
 from pathlib import Path
 
@@ -44,7 +50,7 @@ STATES = [
     ("tuhoutunut", "#8f979b", "Destroyed", "Tuhoutunut"),
     (None, "#cfc9bb", "Planned, or not known", "Suunniteltu tai ei tietoa"),
 ]
-COLORS = dict(structures="#3b2a20", register="#c1272d", known="#7b3fa0", photos="#e09a00", memorials="#1f4e8c")
+COLORS = dict(structures="#3b2a20", register="#c1272d", known="#7b3fa0", photos="#e09a00", memorials="#1f4e8c", sa="#2e9a49")
 # Museovirasto's words for the kinds of site, in English.
 KINDS = {
     "tykkiasemat": "gun positions", "linnoitukset": "fortifications", "linnakkeet": "forts", "luolat": "caves",
@@ -92,6 +98,12 @@ REGISTER = dict(label="Finnish Heritage Agency, register of ancient and historic
                 url="https://www.museovirasto.fi/fi/palvelut-ja-ohjeet/tietojarjestelmat/kulttuuriympariston-tietojarjestelmat/kulttuuriympaeristoen-paikkatietoaineistot",
                 licence="CC BY 4.0")
 MUSEUM = dict(label="Helsinki City Museum, in Finna", label_fi="Helsingin kaupunginmuseo, Finna", url="https://www.finna.fi")
+SA = dict(label="SA-kuva, the Military Museum's photo archive, in Finna", label_fi="SA-kuva, Sotamuseon kuva-arkisto, Finna",
+          url="https://www.finna.fi/Search/Results?filter%5B%5D=building%3A%220%2FSA-kuva%2F%22&lookfor=Helsinki", licence="CC BY 4.0")
+SHARDS = 16
+# Places of the register whose names are words or names of people in the photos' titles ("Prinssi tutustuu …",
+# "Liisan saunassa"), and Loppi, a town as well as a spot.
+NOT_PLACES = {"prinssi", "sauna", "loppi", "akseli", "bunkkeri", "kalervo", "komentosilta", "vuorenjuuri"}
 ART = dict(label="HAM Helsinki Art Museum, public art, through the Service Map", label_fi="HAM, julkiset taideteokset, Palvelukartta",
            url="https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta", licence="CC BY 4.0")
 # The city's own account of the raids of 1944, with its air defence in numbers.
@@ -310,6 +322,113 @@ def photos() -> list[list]:
     return out
 
 
+# Finnish case forms of a place name's last word: (ending, weak stem, strong stem) for the endings whose consonants
+# change (Kauppakatu → Kauppakadulla, Lauttasaari → Lauttasaaressa); any other name inflects on itself.
+GRADE = [("katu", "kadu", "katu"), ("saari", "saare", "saare"), ("kaari", "kaare", "kaare"), ("niemi", "nieme", "nieme"),
+         ("lahti", "lahde", "lahte"), ("mäki", "mäe", "mäke"), ("ranta", "ranna", "ranta"), ("silta", "silla", "silta"),
+         ("kenttä", "kentä", "kenttä"), ("kirkko", "kirko", "kirkko"), ("puistikko", "puistiko", "puistikko"),
+         ("klinikka", "klinika", "klinikka"), ("luoto", "luodo", "luoto"), ("vuori", "vuore", "vuore"), ("pelto", "pello", "pelto"),
+         ("portti", "porti", "portti"), ("kallio", "kallio", "kallio"), ("joki", "joe", "joke"), ("lampi", "lammi", "lampe")]
+
+
+def forms(name: str) -> set[str]:
+    """A place name and its case forms, lower case: Kauppatori, -torin, -torilla, -torille, -torilta, -torissa, -torista, -toriin."""
+    n = name.lower()
+    weak = strong = n if n[-1] in "aeiouyäö" else n + "i"  # Ateneum → Ateneumissa
+    for end, w, st in GRADE:
+        if n.endswith(end):
+            weak, strong = n[:-len(end)] + w, n[:-len(end)] + st
+            break
+    a = "a" if re.search(r"[aou]", n.split()[-1]) else "ä"
+    return {n, weak + "n", strong + strong[-1] + "n"} | {weak + e for e in (f"ll{a}", "lle", f"lt{a}", f"ss{a}", f"st{a}")}
+
+
+def places() -> dict:
+    """{a case form of a place's name: (name, x, y)}: the buildings Wikidata names and the spots of the city's place-name
+    register (squares, parks, islands, streets, stations; not districts). A form two places share finds neither."""
+    from .s12_other import ISLANDS, PLACES_OF_THEIR_OWN, SPOTS  # s12 imports this module
+    names = gpd.read_file(RAW / "Nimisto_piste_rekisteritiedot.geojson")
+    areas = {r.nimi_suomi.lower() for r in names.itertuples() if r.nimi_suomi and r.laji_selite not in SPOTS}
+    found = {}
+    for r in names.itertuples():
+        n = r.nimi_suomi
+        if r.geometry and n and r.laji_selite in SPOTS and (n.lower() not in areas or r.laji_selite in PLACES_OF_THEIR_OWN
+                                                            or n.lower() in ISLANDS):
+            found.setdefault(n.lower(), (n, r.geometry.x, r.geometry.y))
+    b = gpd.read_parquet("data/buildings.parquet", columns=["key", "gone", "geometry"])
+    centre = dict(zip(b.key, b.geometry.representative_point()))
+    for r in csv.DictReader(open(RAW / "wd_buildings.csv")):
+        if r["prt"] in centre and r["labelFi"]:
+            found.setdefault(r["labelFi"].lower(), (r["labelFi"], centre[r["prt"]].x, centre[r["prt"]].y))
+    out, shared = {}, set()
+    for place in found.values():
+        for f in forms(place[0]):
+            if f in out and out[f][0] != place[0]:
+                shared.add(f)
+            out.setdefault(f, place)
+    return {f: v for f, v in out.items() if f not in shared}
+
+
+def place_named(text: str, spots: dict):
+    """The place a photo's place or title names: the longest name found. A name in the nominative opening the title and
+    going on as a sentence is a word, not the place ("Prinssi saapuu …")."""
+    words = list(re.finditer(r"[\wåäöÅÄÖ-]+", text))
+    best = None
+    for n in (3, 2, 1):
+        for i in range(len(words) - n + 1):
+            g = " ".join(w[0] for w in words[i:i + n]).lower()
+            place = spots.get(g)
+            if place and place[0].lower() in NOT_PLACES:
+                continue
+            after = text[words[i + n - 1].end():][:2]
+            if not place or (words[i].start() == 0 and g == place[0].lower() and re.match(r"\s[a-zåäö]", after)):
+                continue
+            if not best or len(place[0]) > len(best[0]):
+                best = place
+    return best
+
+
+def sa_photos(addr: dict, spots: dict) -> list:
+    """The SA-kuva photos whose place or title names one place in the city, one dot per place; the first photo stays on
+    the page, the rest go to shards. The record's own place goes before its title."""
+    by = {}
+    for line in open(RAW / "finna_sa.jsonl"):
+        r = json.loads(line)
+        if not r.get("images") or r.get("imageRights", {}).get("copyright") != "CC BY 4.0":
+            continue
+        own = ", ".join(x.strip() for p in r.get("subjectPlaces") or [] for x in p.split(",")[1:])  # after "Helsinki"
+        title = r.get("title") or ""
+        place = None
+        for text in (own, title):
+            hit = next((a for a in addresses({"subjectPlaces": [f"Helsinki, {m[0]}" for m in re.finditer(
+                r"[A-ZÅÄÖ][\wåäö-]+(?:\s[A-ZÅÄÖ]?[\wåäö-]+)?\s+\d+[a-zåäö]?", text)]}) if a in addr), None)
+            place = (" ".join(x[:1].upper() + x[1:] for x in hit.split()), *addr[hit]) if hit else place_named(text, spots)
+            if place:
+                break
+        if not place:
+            continue
+        year = int(r["year"][:4]) if str(r.get("year", ""))[:4].isdigit() else None
+        maker = next((person(a["name"]) for a in r.get("nonPresenterAuthors") or [] if a.get("name") and a["name"] != "Tuntematon"), None)
+        site = by.setdefault(place[0], dict(at=at(place[1], place[2]), name=place[0], photos=[]))
+        site["photos"].append({k: v for k, v in dict(r=r["id"], y=year, t=clean(title), m=maker, l="CC BY 4.0",
+                                                      o="SA-kuva").items() if v})
+    sites, shards = [], [{} for _ in range(SHARDS)]
+    for s in by.values():
+        ph = sorted(s["photos"], key=lambda p: p.get("y") or 9999)
+        n, years = len(ph), sorted({p["y"] for p in ph if p.get("y")})
+        shard = zlib.crc32(s["name"].encode()) % SHARDS
+        shards[shard][s["name"]] = ph
+        span = f"{years[0]}–{years[-1]}" if len(years) > 1 else str(years[0]) if years else ""
+        sites.append(dict(at=s["at"], name=s["name"], photos=ph[:1], shard=shard, n=n,
+                          sub=" · ".join(filter(None, [span, f"{n} photo{'s' if n > 1 else ''}"])),
+                          sub_fi=" · ".join(filter(None, [span, f"{n} kuva{'a' if n > 1 else ''}"]))))
+    folder = OUT / "saphotos"
+    folder.mkdir(exist_ok=True)
+    for i, sh in enumerate(shards):
+        (folder / f"{i:02d}.json").write_text(json.dumps(sh, ensure_ascii=False, separators=(",", ":")))
+    return sorted(sites, key=lambda s: (-s["n"], s["name"]))
+
+
 def positions() -> list:
     """POSITIONS placed: an address point, a place in the place-name register, or WGS84 coordinates."""
     names = gpd.read_file(RAW / "Nimisto_piste_rekisteritiedot.geojson")
@@ -347,10 +466,10 @@ def memorials() -> list[list]:
     return out
 
 
-def kind(id, label, label_fi, sites, source, list=True, group=None):
+def kind(id, label, label_fi, sites, source, list=True, group=None, **more):
     """A kind of site; kinds of one group are a single choice in the menu."""
     return dict(id=id, label=label, label_fi=label_fi, color=COLORS[id], sites=sites, source=source, list=list,
-                **({"group": group} if group else {}))
+                **({"group": group} if group else {}), **more)
 
 
 def main():
@@ -358,6 +477,11 @@ def main():
                                          for n in ("muinaisjaannos_piste", "muu_kulttuuriperintokohde_piste")]))
     structures, strongpoints, lines = land_front(mv)
     reg, pho, mem = register(mv), photos(), memorials()
+    pts = gpd.read_file(RAW / "Osoiteluettelo_piste_rekisteritiedot.geojson")
+    sa = sa_photos({k: (p.geometry.x, p.geometry.y) for p in pts.itertuples() for k in keys_of(p.katunimi, str(p.osoitenumero or ""))},
+                   places())
+    sa_n = sum(s.pop("n") for s in sa)
+    sa_fi = f"{sa_n:,}".replace(",", " ")  # 1 562
     total, there = sum(g["n"] for g in lines), lines[0]["n"]
     eras = [
         dict(id="ww1", label="First World War", label_fi="1. maailmansota", years="1914–1918",
@@ -390,21 +514,28 @@ def main():
                    "batteries with 77 guns, 41 light guns, 36 searchlights, 13 sound locators and three coastal "
                    "anti-aircraft batteries on the islands. Only a few of their sites are in the heritage register, those "
                    "whose remains it has surveyed; more are known from the regiment's history and articles, many only "
-                   "to the park, field or island. The City Museum's photos show the bomb damage, and the memorials "
-                   "remember the dead."),
+                   "to the park, field or island. The City Museum's photos show the bomb damage, the Defence Forces' "
+                   f"photographers the city at war, {sa_n:,} photos at the {len(sa)} places they name, "
+                   "and the memorials remember the dead."),
              text_fi=("Talvi- ja jatkosodassa Neuvostoliiton pommikoneet hyökkäsivät Helsinkiin yhä uudelleen, rajuimmin "
                       "helmikuun 1944 suurpommituksissa. Silloin kaupungin ilmapuolustuksessa oli 13–15 raskasta "
                       "ilmatorjuntapatteria ja niissä 77 tykkiä, 41 kevyttä it-tykkiä, 36 valonheitintä, 13 kuulosuunninta "
                       "sekä kolme rannikkoilmatorjuntapatteria saarilla. Muinaisjäännösrekisterissä on vain harvat niiden "
                       "paikoista, ne joiden jäänteet on inventoitu; useampia tunnetaan ilmatorjunnan historiikeista ja "
                       "artikkeleista, monia vain puiston, kentän tai saaren tarkkuudella. Kaupunginmuseon kuvat "
-                      "näyttävät pommitusten tuhot, ja muistomerkit muistavat kuolleita."),
+                      "näyttävät pommitusten tuhot, puolustusvoimien kuvaajat sotavuosien kaupungin, "
+                      f"{sa_fi} kuvaa {len(sa)} paikassa, jotka kuvat nimeävät, "
+                      "ja muistomerkit muistavat kuolleita."),
              caveat=("Most batteries were temporary and are gone or built over; the city's archaeological inventory of "
                      "2024–2025 is still adding sites to the register. A photo stands at the address the museum gives it; "
-                     "photos with no house number are left out."),
+                     "photos with no house number are left out. The Defence Forces' photos are found by the place their "
+                     "title names, which may be what they show rather than where they were taken; most name only "
+                     "Helsinki and are left out."),
              caveat_fi=("Useimmat patterit olivat tilapäisiä, ja ne ovat kadonneet tai jääneet rakennusten alle; kaupungin "
                         "arkeologinen inventointi 2024–2025 lisää rekisteriin yhä kohteita. Kuva on museon sille antamassa "
-                        "osoitteessa; kuvat ilman talonnumeroa on jätetty pois."),
+                        "osoitteessa; kuvat ilman talonnumeroa on jätetty pois. Puolustusvoimien kuvat on sijoitettu "
+                        "otsikon nimeämään paikkaan, joka voi olla kuvan kohde eikä kuvauspaikka; useimmat nimeävät vain "
+                        "Helsingin, ja ne on jätetty pois."),
              sources=[HISTORY],
              groups=dict(defences=dict(label="Defences and anti-aircraft positions", label_fi="Varustukset ja ilmatorjunta-asemat")),
              kinds=[kind("register", "Defences in the heritage register", "Rekisteriin kirjatut varustukset", reg[1], REGISTER,
@@ -413,11 +544,13 @@ def main():
                          dict(label="Literature and articles; each card names its own", label_fi="Kirjallisuus ja artikkelit; kortti kertoo omansa",
                               url=HISTORY["url"], url_fi=HISTORY["url_fi"]), group="defences"),
                     kind("photos", "Bomb damage", "Pommitusten tuhot", pho[1], MUSEUM),
+                    # its photos are originals of 4–8 MB, which Finna serves at no smaller size: loaded on a click only
+                    kind("sa", "The city at war, SA-kuva", "Sodan kaupunki, SA-kuva", sa, SA, shards="saphotos", large=True),
                     kind("memorials", "Memorials", "Muistomerkit", mem[1], ART)]),
     ]
     (OUT / "war.json").write_text(json.dumps(dict(eras=eras), ensure_ascii=False, separators=(",", ":")))
     for e in eras:
-        print(e["id"], {k["id"]: len(k["sites"]) for k in e["kinds"]}, "photos", sum(len(s.get("photos", [])) for k in e["kinds"] for s in k["sites"]))
+        print(e["id"], {k["id"]: len(k["sites"]) for k in e["kinds"]}, "photos", sum(s.get("n", len(s.get("photos", []))) for k in e["kinds"] for s in k["sites"]))
 
 
 if __name__ == "__main__":

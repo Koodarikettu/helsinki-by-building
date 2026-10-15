@@ -19,7 +19,7 @@ from .codes import KAYTTARK, TYYPPI
 from .s00_fetch import read_b3dm
 
 COLS = ["id", "vtj_prt", "i_pyraknro", "tyyppi", "c_valmpvm", "i_kerrlkm", "c_kayttark", "c_rakeaine", "c_julkisivu",
-        "c_kiinteistotunnus", "katunimi_suomi", "katunimi_ruotsi", "osoitenumero"]
+        "c_kiinteistotunnus", "katunimi_suomi", "katunimi_ruotsi", "osoitenumero", "c_poltaine", "c_lammtapa"]
 ECEF_TO_GK25 = Transformer.from_crs(4978, 3879, always_xy=True)
 Y_UP = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])  # glTF's y-up into the tile's z-up: (x, y, z) → (x, -z, y)
 USE_CODE = {fi.lower(): code for code, (fi, _) in KAYTTARK.items()}

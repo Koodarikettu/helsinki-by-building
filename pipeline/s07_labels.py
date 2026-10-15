@@ -7,13 +7,16 @@ tier 2 only up close. Streets not built yet are left out.
 
 Also why each street got its name, for the cards: the city's place-name register (Nimisto_piste_rekisteritiedot,
 CC BY 4.0) gives the reason, and for many an older history of the name, in Finnish. The register keeps no earlier
-names of its own; former_names.json holds those its histories give, read out of them once by a language model (Claude),
-and a name is kept only while it still stands word for word in its street's text.
+names of its own; former_names.json holds those its histories give, read out of them by a language model (Claude):
+only names this same street carried, not a street joined to it or one it was part of, not a proposal. Each name
+carries the passage that shows it, and is kept only while that passage still stands word for word in its street's
+text and names it.
 
 The street areas themselves go to the map's street-name view (streetmap.bin, laid out as s04_water's; streetmap.json
 names each polygon), those with a former name first.
 """
 import json
+import re
 import math
 from pathlib import Path
 
@@ -59,8 +62,10 @@ def placement(p):
 
 
 def former(names: dict, text: dict) -> dict:
-    """The former names that still stand word for word in their street's text: {street: [[name, when], ...]}."""
-    return {k: kept for k, v in names.items() if (kept := [n for n in v if n[0] in text.get(k, "")])}
+    """The former names whose passage still stands word for word in their street's text: {street: [[name, when], ...]}."""
+    ws = lambda t: re.sub(r"\s+", " ", t).strip()
+    return {k: kept for k, v in names.items()
+            if (kept := [[n, when] for n, when, quote in v if n in quote and quote in ws(text.get(k, ""))])}
 
 
 def origins(names: set) -> dict:

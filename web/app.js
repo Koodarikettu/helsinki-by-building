@@ -12,8 +12,8 @@ const GROUP_COLORS = ['#ec0000', '#1f4e8c', '#d99a12', '#2e8b57', '#7b3fa0', '#0
 const MAX_GROUPS = GROUP_COLORS.length;
 const ATTR_W = 256;
 const WORKERS = Math.min(4, navigator.hardwareConcurrency || 2);
-// Solar shares the Energy button and the demolished buildings the Period one: the panel switches between the two.
-const MODE = { period: 0, floors: 1, energy: 2, layers: 3, solar: 4, gone: 5 };
+// Solar and heating share the Energy button and the demolished buildings the Period one: the panel switches between them.
+const MODE = { period: 0, floors: 1, energy: 2, layers: 3, solar: 4, gone: 5, heat: 6 };
 // Energy labels G … A (index 1–7; 0 = no label), from red through yellow to green.
 const ENERGY_COLORS = ['#efeee9', '#c1272d', '#e4572e', '#f08a24', '#f6c445', '#c9d64a', '#8cc152', '#2e9a49'];
 // Solar potential: none, no suitable roof, then the steps of config.solar.steps from pale yellow to deep orange.
@@ -25,6 +25,11 @@ const ENERGY_COLORS = ['#efeee9', '#c1272d', '#e4572e', '#f08a24', '#f6c445', '#
 const FLOOR_STEPS = [1, 2, 3, 5, 7, 9, 13];
 const FLOOR_COLORS = ['#f5ce05', '#fd9305', '#f6563b', '#d3266f', '#952490', '#52268d', '#191e6a'];
 const SOLAR_COLORS = ['#efeee9', '#c4c9cc', '#fbeeb0', '#f9dc7a', '#f6c445', '#f0a830', '#e88a24', '#d9661f', '#bf4a1c', '#8f2f14'];
+// Heat source, by the groups of pipeline/codes.py HEAT after none recorded: district heating, electricity, ground-source
+// heat, oil, the rest. Every pair stays apart for colour-blind eyes too (dataviz validator, all pairs, on the land);
+// the closest, oil and ground heat, sits in the 6–8 ΔE band that asks for a second cue: the legend names each and
+// isolates it on a click.
+const HEAT_COLORS = ['#efeee9', '#2a78d6', '#eda100', '#1baf7a', '#e34948', '#8f2f14'];
 
 const [config, layers, attrBuf, info, war, other] = await Promise.all([
   fetch('data/helsinki.json').then(r => r.json()),
@@ -109,6 +114,8 @@ const FI_UI = {
   'Wikipedia': 'Wikipedia', 'Finnish Wikipedia': 'Suomenkielinen Wikipedia', 'Helsinki building register': 'Helsingin rakennusrekisteri',
   'The register gives': 'Rekisteri antaa', 'c. ': 'n. ', 'The 3D city model gives': '3D-kaupunkimalli antaa',
   'Energy label': 'Energialuokka', 'Solar potential': 'Aurinkosähköpotentiaali', 'no suitable roof': 'ei sopivaa kattoa',
+  'Heating': 'Lämmitys', 'Not recorded': 'Ei kirjattu', 'Fines on the street': 'Virhemaksuja kadulla', 'Most fined streets': 'Eniten virhemaksuja', 'No fines': 'Ei virhemaksuja',
+  'In all': 'Yhteensä', 'fines': 'virhemaksua', 'Per 100 m': '100 metriä kohden', 'Fines per 100 m': 'Virhemaksuja 100 metriä kohden', 'under': 'alle', '100 m or longer': 'vähintään 100 m pitkät', 'Solar': 'Aurinkosähkö', 'Click a source to see it alone.': 'Napsauta lähdettä nähdäksesi vain sen.',
   'Street name, in Finnish': 'Kadun nimi', 'History of the name': 'Nimen historia', 'Energy certificate register': 'Energiatodistusrekisteri',
   'HSY solar potential': 'HSY:n aurinkosähköpotentiaali', 'Helsinki place names': 'Helsingin nimistö', 'MWh a year': 'MWh vuodessa',
   'Street names': 'Kadunnimet', 'Earlier name known': 'Aiempi nimi tiedossa', 'Earlier names': 'Aiemmat nimet',
@@ -292,6 +299,7 @@ const uniforms = {
   uMaquette: { value: col(MAQUETTE) },
   uEnergy: { value: ENERGY_COLORS.map(col) },
   uSolar: { value: SOLAR_COLORS.map(col) },
+  uHeat: { value: HEAT_COLORS.map(col) },
   uFloors: { value: FLOOR_COLORS.map(col) },
   uHover: { value: -1 },
   uSelected: { value: -1 },
@@ -312,6 +320,7 @@ const VERT = /* glsl */`
   uniform vec3 uMaquette;
   uniform vec3 uEnergy[${ENERGY_COLORS.length}];
   uniform vec3 uSolar[${SOLAR_COLORS.length}];
+  uniform vec3 uHeat[${HEAT_COLORS.length}];
   uniform vec3 uFloors[${FLOOR_COLORS.length}];
   out vec3 vColor;
   out vec3 vWorld;
@@ -339,12 +348,14 @@ const VERT = /* glsl */`
     int period = pf % 16;
     int flag = pf / 16 % 16;
     float gone = float(pf / 256);  // the year it was demolished, 0 if it stands
+    int heat = int(a.z / 16384.0);
+    bool goneView = abs(uMode - 5.0) < 0.5;
     vGid = a.w;
-    float vis = uMode < 1.5 ? uMask[period] : 1.0;
+    float vis = uMode < 1.5 ? uMask[period] : uMode > 5.5 ? uMask[heat] : 1.0;
     float g = clamp((uYear - year + 1.0) / uRise, 0.0, 1.0);
     g = g * g * (3.0 - 2.0 * g);
     bool down = gone > 0.0 && uYear >= gone;  // torn down by the year shown: gone, but in the view of the demolished
-    if (g <= 0.003 || vis <= 0.003 || (down && uMode < 4.5)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    if (g <= 0.003 || vis <= 0.003 || (down && !goneView)) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
 
     // Entrances, only while the film plays and while tiles load: a building drops in from its own side of the
     // sky, the same side every time (seeded by its id). Filters and scrubbing change the city at once.
@@ -368,10 +379,12 @@ const VERT = /* glsl */`
       c = uFloors[floorStep(mod(a.z, 128.0))];
     } else if (uMode < 2.5) {
       c = uEnergy[int(mod(a.z / 128.0, 8.0))];
+    } else if (uMode > 5.5) {
+      c = uHeat[heat];
     } else if (uMode > 4.5) {
       c = down ? uPalette[period] : uMaquette;
     } else if (uMode > 3.5) {
-      c = uSolar[int(a.z / 1024.0)];
+      c = uSolar[int(mod(a.z / 1024.0, 16.0))];
     } else {
       c = uMaquette;
       for (int g = 0; g < ${MAX_GROUPS}; g++) {
@@ -386,7 +399,7 @@ const VERT = /* glsl */`
       }
     }
     if (year <= uYearFrom) c = mix(c, uMaquette, 0.8);
-    if (gone > 0.0 && uMode < 4.5) c = mix(c, vec3(1.0), 0.6);  // a ghost: torn down since
+    if (gone > 0.0 && !goneView) c = mix(c, vec3(1.0), 0.6);  // a ghost: torn down since
     // A quest's question about one building turns it red; a year riddle also hides every other age.
     if (uBlind > 0.5 && vGid == uSelected) c = vec3(0.925, 0.0, 0.0);
     else if (uBlind > 0.5 && uBlind < 1.5) c = uMaquette;
@@ -740,6 +753,7 @@ const groundKind = () => !groundOn ? '' : typeof groundPick === 'string' ? groun
 function showCity() {
   flat.visible = !photoOn;
   blocks.visible = labelGroup.visible = !photoOn && !(groundOn && mapAlone);
+  if (viewOn && ERAS[viewEra].alone) blocks.visible = false;  // the parking fines' streets alone
 }
 function setGroundYear(y) {
   stopPlay();
@@ -818,16 +832,17 @@ function setStreets(on) {
 streetsBtn.onclick = () => setStreets(!streetsOn);
 // One tab pressed: the street-name, war and aerial views stand over the colourings.
 function markTabs() {
-  const m = { [MODE.solar]: MODE.energy, [MODE.gone]: MODE.period }[uniforms.uMode.value] ?? uniforms.uMode.value;
+  const m = { [MODE.solar]: MODE.energy, [MODE.heat]: MODE.energy, [MODE.gone]: MODE.period }[uniforms.uMode.value] ?? uniforms.uMode.value;
   document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !photoOn && !streetsOn && !viewOn && +b.dataset.mode === m));
   streetsBtn.setAttribute('aria-pressed', streetsOn);
   warPick.classList.toggle('on', viewOn && ERAS[viewEra].menu === 'war');
   otherPick.classList.toggle('on', viewOn && ERAS[viewEra].menu === 'other');
 }
-function pickStreet(x, y) {
-  if (!streetsOn || photoOn || !streetMap) return null;
+// The street under the pointer, in the street-name view's mesh or the parking fines' (they share the street areas).
+function pickStreet(x, y, mesh = streetMap?.mesh) {
+  if (photoOn || !mesh) return null;
   ray.setFromCamera(new THREE.Vector2(x / canvas.clientWidth * 2 - 1, 1 - y / canvas.clientHeight * 2), camera);
-  const hit = ray.intersectObject(streetMap.mesh, false)[0];
+  const hit = ray.intersectObject(mesh, false)[0];
   if (!hit) return null;
   const i = hit.faceIndex * 3, ps = streetMap.polys;
   let lo = 0, hi = ps.length - 1;  // the last polygon starting at or before the hit triangle
@@ -847,14 +862,18 @@ function streetHtml(name) {
       : `<p class="why">${t('The place-name register gives no explanation.')}</p>`}</section>
     <section class="sources"><h4>${t('Read more')}</h4><p>${link(NAMES_URL(), t('Helsinki place names'))}, CC BY 4.0</p></section>`;
 }
-function pinStreet(name, x, y) {
-  pinCard(-1);
-  pinnedStreet = name;
-  // The street's own polygons, drawn darker over the rest.
+// A street's own polygons, drawn over the rest in a colour of their own.
+function markStreet(name, color) {
   const k = streetMap.names.indexOf(name), idx = streetMap.mesh.geometry.index.array, sel = [];
   streetMap.of.forEach((n, p) => { if (n === k) for (let i = streetMap.polys[p].start, e = i + streetMap.polys[p].count; i < e; i++) sel.push(idx[i]); });
   streetMap.picked.geometry.setIndex(sel);
+  streetMap.picked.material.color.set(color);
   streetMap.picked.visible = true;
+}
+function pinStreet(name, x, y) {
+  pinCard(-1);
+  pinnedStreet = name;
+  markStreet(name, '#163a7a');
   card.innerHTML = streetHtml(name);
   card.classList.add('pinned');
   card.hidden = false;
@@ -942,6 +961,95 @@ async function buildEra(E) {
   }
   if (E.lines) E.kinds.find(K => K.id === 'structures').obj.add(await trenchLines(E));  // the land front's own lines
   if (E.tracks) E.kinds[0].obj.add(await trackLines(E));
+  if (E.streets) E.kinds[0].obj.add(await fineStreets(E));
+}
+// The parking fines lie on the street areas of the street-name view (pipeline/s12_other.py, fines.json, loaded when
+// the view first opens): each street coloured by its fines in the timeline's year, in the steps of E.steps (or E.dense,
+// per 100 m), the more the redder, as noise maps go from quiet to loud; a street with none is a pale grey. The ramp is
+// one hue, light to dark, each step clearly darker, and its lightest clears the land at 2:1 (dataviz validator,
+// ordinal). A click opens its card; the timeline holds to the years there are, and the buildings can be hidden.
+const FINE_COLORS = ['#f0957a', '#eb7656', '#e05838', '#cf3d28', '#b2261e', '#8a1418', '#5c0710'];
+const FINE_NONE = '#dedbd3';
+async function fineStreets(E) {
+  const [s, d] = await Promise.all([streetLoad ??= loadStreets(), fetch(`data/${E.streets}`).then(r => r.json())]);
+  s.mesh.visible = streetsOn;
+  const geo = s.mesh.geometry;  // shared: one material draws every group
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(3 * geo.attributes.position.count), 3));
+  E.mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
+  E.mesh.position.y = 0.15;
+  E.data = d;
+  return E.mesh;
+}
+const fineYear = E => Math.min(Math.max(Math.floor(uniforms.uYear.value), E.data.years[0]), E.data.years.at(-1));
+// A street's measure in the year's i-th place: all its fines, or its fines per 100 m (null where its length is not known).
+function fineValue(E, name, i) {
+  const n = E.data.streets[name]?.[i]?.[0] || 0, m = E.data.lengths[name];
+  return !E.per ? n : n && m ? n / (m / 100) : n ? null : 0;
+}
+const fineStep = (E, v) => (E.per ? E.dense : E.steps).findLastIndex(t => v >= t);
+// Fines per 100 m read best to a decimal while few
+const per100 = v => v.toLocaleString(fmtLocale(), { maximumFractionDigits: v < 10 ? 1 : 0 });
+function colourFines(E) {
+  if (!E.data || `${fineYear(E)}:${!!E.per}` === E.shown) return;
+  E.year = fineYear(E);
+  E.shown = `${E.year}:${!!E.per}`;
+  const i = E.data.years.indexOf(E.year), colors = E.mesh.geometry.attributes.color, idx = E.mesh.geometry.index.array, c = new THREE.Color();
+  streetMap.of.forEach((n, p) => {
+    const v = fineValue(E, streetMap.names[n], i);
+    c.set(v ? FINE_COLORS[fineStep(E, v)] : FINE_NONE);
+    for (let k = streetMap.polys[p].start, e = k + streetMap.polys[p].count; k < e; k++) c.toArray(colors.array, 3 * idx[k]);
+  });
+  colors.needsUpdate = true;
+  renderPanel(); drawHist();  // the legend counts the year's streets, the timeline its fines
+  if (pinnedSite?.street) pinFine(E, pinnedSite.name, ...lastPin);  // its card, for the new year
+}
+// A street's card, as a site of the view's one kind: the year's fines, per 100 m too, and commonest reasons; its fines
+// year by year.
+function fineSite(E, name) {
+  const d = E.data, per = d.streets[name] || [], [n = 0, ...top] = per[d.years.indexOf(E.year)] || [], m = d.lengths[name];
+  const why = [];
+  for (let k = 0; k < top.length; k += 2) why.push(`${d.reasons[top[k]]} (${fmt(top[k + 1])})`);
+  const dense = n && m ? ` · ${per100(n / (m / 100))} / 100 m` : '';
+  return { kind: E.kinds[0], era: E, name, street: true,
+    sub: `${fmt(n)} fine${n === 1 ? '' : 's'} in ${E.year}${dense}`, sub_fi: `${fmt(n)} virhemaksu${n === 1 ? '' : 'a'} vuonna ${E.year}${dense}`,
+    text: [m && `The street areas are about ${fmt(m)} m long.`, why.length && `The year's commonest reasons, in Finnish: ${why.join(', ')}.`].filter(Boolean).join(' '),
+    text_fi: [m && `Katualueiden pituus on noin ${fmt(m)} m.`, why.length && `Vuoden yleisimmät syyt: ${why.join(', ')}.`].filter(Boolean).join(' '),
+    rows: d.years.map((y, j) => [String(y), fmt(per[j]?.[0] || 0)]) };
+}
+// The fines view's legend: all fines or per 100 m, its years, the year's streets in each step, and the most fined of
+// them; per 100 m only streets of 100 m or more are ranked, as a street area of a few metres with a few fines would
+// lead it.
+function fineLegend(E, row) {
+  if (!E.data) return '';
+  const d = E.data, y = E.year ?? fineYear(E), i = d.years.indexOf(y), steps = E.per ? E.dense : E.steps, n = steps.map(() => 0), top = [];
+  let none = streetMap.names.length;
+  for (const name of Object.keys(d.streets)) {
+    const v = fineValue(E, name, i);
+    if (v) { n[fineStep(E, v)]++; none--; if (!E.per || d.lengths[name] >= 100) top.push([v, name]); }
+  }
+  top.sort((a, b) => b[0] - a[0]);
+  const label = j => E.per ? (j === 0 ? `${t('under')} ${steps[1]}` : j === steps.length - 1 ? `${steps[j]}+` : `${steps[j]}–${steps[j + 1]}`)
+    : j === steps.length - 1 ? `${fmt(steps[j])}+` : `${fmt(steps[j])}–${fmt(steps[j + 1] - 1)}`;
+  return `<div class="sub" role="group" aria-label="${t('Fines on the street')}">${[false, true].map(x => `
+      <button data-fine-per="${x}" aria-pressed="${!!E.per === x}">${t(x ? 'Per 100 m' : 'In all')}</button>`).join('')}</div>
+    <label class="fine-alone"><input type="checkbox"${E.alone ? ' checked' : ''}> ${t('Hide the buildings')}</label>
+    <p class="note">${LANG === 'fi' ? `Vuonna ${y} ${fmt(d.totals[i])} virhemaksua, joista ${fmt(d.mapped[i])} kartan kaduilla.`
+      : `${fmt(d.totals[i])} fines in ${y}, ${fmt(d.mapped[i])} of them on the map's streets.`}</p>
+    <h2 class="section">${t(E.per ? 'Fines per 100 m' : 'Fines on the street')}</h2><div class="energy-scale">${steps.map((_, j) => row(FINE_COLORS[j], label(j), n[j])).reverse().join('')}
+      ${row(FINE_NONE, t('No fines'), none)}</div>
+    <h2 class="section">${t('Most fined streets')}${E.per ? ` <span class="note">${t('100 m or longer')}</span>` : ''}</h2><ul class="stories">${top.slice(0, 20).map(([v, name]) => `
+      <li><button class="story" data-fine="${esc(name)}"><b>${esc(name)}</b><span>${E.per ? `${per100(v)} / 100 m` : fmt(v)}</span></button></li>`).join('')}</ul>`;
+}
+function pinFine(E, name, x, y) {
+  pinSite(fineSite(E, name), x, y);
+  markStreet(name, '#ec0000');
+}
+function streetCentre(name) {
+  const k = streetMap.names.indexOf(name), idx = streetMap.mesh.geometry.index.array, pos = streetMap.mesh.geometry.attributes.position;
+  const box = new THREE.Box3();
+  streetMap.of.forEach((n, p) => { if (n === k) for (let i = streetMap.polys[p].start, e = i + streetMap.polys[p].count; i < e; i++)
+    box.expandByPoint(new THREE.Vector3().fromBufferAttribute(pos, idx[i])); });
+  return box.getCenter(new THREE.Vector3());
 }
 function setView(on) {
   if (on && streetsOn) setStreets(false);
@@ -953,17 +1061,22 @@ function setView(on) {
     uniforms.uMode.value = MODE.period;
     maskTarget = periods.map(() => 1);
     buildEra(ERAS[viewEra]);
+    const span = ERAS[viewEra].span;  // the parking fines' years: the timeline holds to them
+    if (span) { stopPlay(); uniforms.uYear.value = Math.min(Math.max(Math.floor(uniforms.uYear.value), span[0]), span[1]); }
   }
   markTabs();
   pinCard(-1);
+  showCity();
   renderPanel(); drawHist(); drawPicks();
 }
 const viewNow = () => viewOn && !photoOn ? ERAS[viewEra] : null;
+const fineView = () => viewNow()?.streets ? viewNow() : null;
 const viewKinds = E => E.kinds.filter(K => !viewKind || (K.group || K.id) === viewKind);  // a kind, or a group of them
 const viewShown = () => viewNow() ? viewKinds(viewNow()) : [];
 function showView() {
   const shown = viewShown();
   viewNow()?.trackLines?.update(uniforms.uYear.value);
+  if (viewNow()?.streets) colourFines(viewNow());
   for (const E of ERAS) for (const K of E.kinds) if (K.obj) K.obj.visible = shown.includes(K);
   if (pinnedSite && !shown.includes(pinnedSite.kind)) pinCard(-1);  // its war or kind is no longer shown
 }
@@ -1025,7 +1138,8 @@ function siteHtml(s, pinned) {
     credit: `${[a.t, a.y, a.m].filter(Boolean).map(esc).join(', ')}, ${pinned
       ? `${link(FINNA_PAGE(a.r), a.o || 'Helsingin kaupunginmuseo')}, ${link(LICENCE[a.l], a.l)}` : `${esc(a.o || 'Helsingin kaupunginmuseo')}, ${esc(a.l)}`}` }));
   slide = 0;
-  return `<button class="card-close" aria-label="${t('Close')}">×</button>${slides.length ? figureHtml(pinned) : ''}
+  // a kind whose photos are too large to fetch on a hover (SA-kuva's originals) shows them once the card is pinned
+  return `<button class="card-close" aria-label="${t('Close')}">×</button>${slides.length && (pinned || !K.large) ? figureHtml(pinned) : ''}
     <header class="card-head"><h3>${esc(tr(s, 'name'))}</h3>${tr(s, 'sub') ? `<p class="sv">${esc(tr(s, 'sub'))}</p>` : ''}</header>
     ${s.rows ? `<section><dl>${s.rows.map(([k, v]) => `<dt>${t(k)}</dt><dd lang="fi">${esc(v)}</dd>`).join('')}</dl></section>` : ''}
     ${tr(s, 'text') ? `<section><p class="why">${esc(tr(s, 'text'))}</p></section>` : ''}
@@ -1044,10 +1158,12 @@ function showSite(s, x, y) {
   }
   placeCard(x, y);
 }
-// A place of the Heritage Agency's photos carries only its first; the rest come from their shard when its card opens.
+// A place of the Heritage Agency's or the SA-kuva photos carries only its first; the rest come from its kind's shard
+// (mvphotos, saphotos) when its card opens.
 const photoShards = {};
 async function allPhotos(s) {
-  const shard = await (photoShards[s.shard] ??= fetch(`data/mvphotos/${String(s.shard).padStart(2, '0')}.json`).then(r => r.json()));
+  const url = `data/${s.kind.shards}/${String(s.shard).padStart(2, '0')}.json`;
+  const shard = await (photoShards[url] ??= fetch(url).then(r => r.json()));
   s.photos = shard[s.name] || s.photos;
   s.shard = null;
 }
@@ -1105,6 +1221,8 @@ function building(gid) {
     eluku: attrs.getUint16(o + 36, true),
     solar: attrs.getInt32(o + 38, true),
     panel: attrs.getUint16(o + 42, true),
+    fuel: config.fuels[attrs.getUint8(o + 44)],
+    hmethod: config.methods[attrs.getUint8(o + 45)],
     groups: groupsByBit.filter(g => g.bit < 32 ? (lay0 >>> g.bit) & 1 : (lay1 >>> (g.bit - 32)) & 1),
   };
 }
@@ -1139,7 +1257,7 @@ function residentsHtml(b, pinned) {
   const people = pinned ? n.people : n.people.slice(0, 3);
   return `<section><h4>${t('Lived or worked here')}</h4><ul class="residents">${people.map(p => `<li>
     <b>${pinned ? link(p.url, p.person) : esc(p.person)}</b>${p.born ? ` <span>${esc(p.born)}${p.died ? '–' + esc(p.died) : ''}</span>` : ''}
-    ${p.desc ? `<div class="desc">${esc(p.desc)}</div>` : ''}
+    ${tr(p, 'desc') ? `<div class="desc">${esc(tr(p, 'desc'))}</div>` : ''}
     ${pinned ? (p.quote.startsWith('Wikidata') ? `<p class="why">${esc(t(p.quote))}</p>` : `<blockquote lang="fi">${esc(p.quote)}</blockquote>`) : ''}
     ${p.died && b.year > +p.died + 5 ? `<p class="why">${LANG === 'fi' ? `Rakennus on vuodelta ${b.year}, ajalta jolloin ${esc(p.person.split(' ').slice(-1)[0])} oli jo kuollut; se seisoo talon paikalla.` : `This building dates from ${b.year}, after ${esc(p.person.split(' ').slice(-1)[0])} died; it stands where their house stood.`}</p>` : ''}</li>`).join('')}</ul>
     ${!pinned && n.people.length > 3 ? `<p class="why">${LANG === 'fi' ? 'ja' : 'and'} ${n.people.length - 3} ${LANG === 'fi' ? 'muuta' : 'more'}</p>` : ''}</section>`;
@@ -1159,8 +1277,9 @@ function archiveOf(bag, then) {
   }
   return archiveShards[n]?.[bag] || [];
 }
-// Images and records straight from Finna; medium is 600 px wide.
-const FINNA_IMG = id => `https://api.finna.fi/Cover/Show?source=Solr&id=${encodeURIComponent(id)}&index=0&size=medium`;
+// Images and records straight from Finna, 600 px wide at most: for SA-kuva's photos Finna has no smaller size than
+// the original (4,900 px, 4–8 MB), but w= has it scaled down (70 KB).
+const FINNA_IMG = id => `https://api.finna.fi/Cover/Show?source=Solr&id=${encodeURIComponent(id)}&index=0&size=medium&w=600`;
 const FINNA_PAGE = id => `https://www.finna.fi/Record/${encodeURIComponent(id)}`;
 const LICENCE = { 'PDM': 'https://creativecommons.org/publicdomain/mark/1.0/', 'CC0': 'https://creativecommons.org/publicdomain/zero/1.0/',
   'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/' };
@@ -1196,6 +1315,9 @@ function showSlide(i) {
   const s = slides[slide], img = fig.querySelector('img');
   img.removeAttribute('data-sv');
   img.src = s.sv || s.src;
+  fig.classList.toggle('loading', !img.complete);  // the last photo fades until this one has come
+  // The photos around it are fetched meanwhile: Finna takes seconds over a photo it has not served before.
+  for (const x of [...slides.slice(slide + 1, slide + 4), ...slides.slice(Math.max(0, slide - 2), slide)]) if (!x.sv) new Image().src = x.src;
   fig.classList.toggle('sv', !!s.sv);
   const year = fig.querySelector('.year');
   if (year) year.textContent = s.label;
@@ -1218,13 +1340,14 @@ function wireSlides() {
   if (!fig) return;
   // A picture that fails to load says so and links to the archive; with nothing else to show the frame goes.
   fig.querySelector('img').addEventListener('error', () => {
+    fig.classList.remove('loading');
     if (slides.length < 2) { fig.remove(); return; }
     fig.classList.add('failed');
     fig.querySelector('.frame .gone')?.remove();
     fig.querySelector('.frame').insertAdjacentHTML('afterbegin', `<p class="gone">${t('This photo did not load.')}${
       slides[slide].page ? ` ${link(slides[slide].page, t('Open it in the archive'))}` : ''}</p>`);
   });
-  fig.querySelector('img').addEventListener('load', () => { fig.classList.remove('failed'); fig.querySelector('.frame .gone')?.remove(); });
+  fig.querySelector('img').addEventListener('load', () => { fig.classList.remove('failed', 'loading'); fig.querySelector('.frame .gone')?.remove(); });
   fig.querySelector('.prev')?.addEventListener('click', () => showSlide(slide - 1));
   fig.querySelector('.next')?.addEventListener('click', () => showSlide(slide + 1));
   let x0 = null; // swipe on phones
@@ -1260,6 +1383,7 @@ function cardHtml(gid, pinned) {
     b.eclass && [t('Energy label'), `${'GFEDCBA'[b.eclass - 1]} (${LANG === 'fi' ? `E-luku ${b.eluku}, vuoden 20${b.ever} asteikko` : `E-value ${b.eluku}, 20${b.ever} scale`})`],
     b.solar >= 0 && [t('Solar potential'), b.solar ? (LANG === 'fi' ? `${mwh(b.solar)} MWh vuodessa, ${fmt(b.panel)} m² paneeleja`
       : `${mwh(b.solar)} MWh a year from ${fmt(b.panel)} m² of panels`) : t('no suitable roof')],
+    (b.fuel || b.hmethod) && [t('Heating'), esc([b.fuel?.[LANG], b.hmethod?.[LANG].toLowerCase()].filter(Boolean).join(', '))],
     pinned && b.bag.length === 10 && [t('Building ID'), esc(b.bag)],
   ].filter(Boolean);
   // Why the street of its address is so named, in Finnish: the reason first, the older history folded under it.
@@ -1302,7 +1426,7 @@ function cardHtml(gid, pinned) {
     ${dating ? `<section><h4>${t('Dating')}</h4><p class="why">${dating}</p></section>` : ''}
     ${naming || ''}
     ${pinned ? `<section class="sources"><h4>${t('Read more')}</h4><p>${sources.join(', ')}</p></section>`
-      : `<p class="hint">${w?.wiki || b.groups.some(g => g.layer.notes?.[b.bag]) ? t('Click for the story and sources') : t('Click to keep this card open')}</p>`}`;
+      : `<p class="hint">${w?.wiki || b.groups.some(g => g.layer.notes?.[b.bag]) || residentsLayer?.notes?.[b.bag] ? t('Click for the story and sources') : t('Click to keep this card open')}</p>`}`;
 }
 
 const card = document.getElementById('card');
@@ -1372,6 +1496,10 @@ canvas.addEventListener('pointerup', e => {
   if (streetsOn && !photoOn) {
     const street = pickStreet(e.clientX, e.clientY);
     return street && street !== pinnedStreet ? pinStreet(street, e.clientX, e.clientY) : pinCard(-1);
+  }
+  if (viewNow()?.streets) {
+    const name = pickStreet(e.clientX, e.clientY, viewNow().mesh);
+    return name && name !== pinnedSite?.name ? pinFine(viewNow(), name, e.clientX, e.clientY) : pinCard(-1);
   }
   if (viewNow()) {
     const site = pickSite(e.clientX, e.clientY);
@@ -1738,6 +1866,7 @@ function renderPanel() {
       <div class="layer-detail"><p>${esc(tr(E, 'text'))}</p></div>
       ${dots.length ? `<h2 class="section">${t('On the map')}</h2><div class="energy-scale">${dots.map(K => row(K.color, esc(label(K)), K.sites.length)).join('')}</div>` : ''}
       ${land || E.tracks ? `<h2 class="section">${esc(tr(E, 'linesTitle'))}</h2><div class="energy-scale">${E.legend.map(g => row(g.color, esc(tr(g, 'label')), g.n)).join('')}</div>` : ''}
+      ${E.streets ? fineLegend(E, row) : ''}
       ${lists.length ? `<input class="filter" type="search" placeholder="${t('Find a site')}" aria-label="${t('Find a site')}">` : ''}
       ${lists.map(([title, list], j) => `<h2 class="section">${esc(title)}</h2><ul class="stories">${list.map((x, i) => `
         <li data-q="${esc(`${tr(x, 'name')} ${tr(x, 'sub') || ''}`.toLowerCase())}"><button class="story" data-list="${j}" data-i="${i}">
@@ -1748,8 +1877,16 @@ function renderPanel() {
       const q = e.target.value.toLowerCase();
       panel.querySelectorAll('.stories li').forEach(li => { li.hidden = q && !li.dataset.q.includes(q); });
     });
+    // The parking fines: a year moves the timeline; a street flies there and opens its card.
+    panel.querySelector('.fine-alone input')?.addEventListener('change', e => { E.alone = e.target.checked; showCity(); });
+    panel.querySelectorAll('[data-fine-per]').forEach(b => b.onclick = () => { E.per = b.dataset.finePer === 'true'; colourFines(E); });
+    panel.querySelectorAll('[data-fine]').forEach(b => b.onclick = () => {
+      const c = streetCentre(b.dataset.fine);
+      collapsePanelOnPhone();
+      flyTo(c.x, c.z, () => pinFine(E, b.dataset.fine, innerWidth * 0.62, innerHeight * 0.18), 700);
+    });
     // A strongpoint is a place to fly to; a site also opens its card.
-    panel.querySelectorAll('.story').forEach(b => b.onclick = () => {
+    panel.querySelectorAll('.story[data-list]').forEach(b => b.onclick = () => {
       const x = lists[+b.dataset.list][1][+b.dataset.i], place = !x.kind;
       collapsePanelOnPhone();
       flyTo(x.at[0], x.at[1], place ? null : () => pinSite(x, innerWidth * 0.62, innerHeight * 0.18), place ? 900 : 380);
@@ -1787,10 +1924,24 @@ function renderPanel() {
     panel.innerHTML = `<h2>${t('Storeys')}</h2>
       <div class="energy-scale">${FLOOR_COLORS.map((c, i) => row(c, label(i), n[i])).reverse().join('')}</div>
       <p class="note">${LANG === 'fi' ? `${fmt(config.stats.floorsRegister)} rakennuksen kerrosluku on rakennusrekisteristä; loput ${fmt(config.stats.floorsAssumed)} ovat lähes kaikki pieniä talousrakennuksia. ${fmt(config.stats.heightModel)} rakennuksen korkeus on kaupungin 3D-mallista: kattopintojen korkeuden 70. persentiili. Muiden korkeus on kerrosluku kertaa 3,2 m.` : `${fmt(config.stats.floorsRegister)} buildings take their floors from the building register; the other ${fmt(config.stats.floorsAssumed)} are nearly all small outbuildings. ${fmt(config.stats.heightModel)} buildings take their height from the city's 3D model: the 70th percentile of their roof surfaces. The rest are floors times 3.2 m.`}</p>`;
-  } else if (mode === MODE.energy || mode === MODE.solar) {
-    const sub = `<div class="sub" role="group" aria-label="${t('Energy')}">${[MODE.energy, MODE.solar].map(m => `
-      <button data-sub="${m}" aria-pressed="${m === mode}">${t(m === MODE.energy ? 'Energy label' : 'Solar potential')}</button>`).join('')}</div>`;
-    if (mode === MODE.energy) {
+  } else if (mode === MODE.energy || mode === MODE.solar || mode === MODE.heat) {
+    const sub = `<div class="sub" role="group" aria-label="${t('Energy')}">${[MODE.energy, MODE.solar, MODE.heat].map(m => `
+      <button data-sub="${m}" aria-pressed="${m === mode}">${t({ [MODE.energy]: 'Energy label', [MODE.solar]: 'Solar', [MODE.heat]: 'Heating' }[m])}</button>`).join('')}</div>`;
+    if (mode === MODE.heat) {
+      const h = config.heat;
+      panel.innerHTML = `${sub}<div class="swatches">${[...h.groups.map(g => g[LANG]), t('Not recorded')].map((label, i) => `
+        <button class="swatch" data-i="${(i + 1) % HEAT_COLORS.length}" aria-pressed="${!!maskTarget[(i + 1) % HEAT_COLORS.length]}">
+          <i style="background:${HEAT_COLORS[(i + 1) % HEAT_COLORS.length]}"></i><span>${esc(label)}</span><span class="n">${fmt(h.counts[(i + 1) % HEAT_COLORS.length])}</span>
+        </button>`).join('')}</div>
+        <p class="note">${t('Click a source to see it alone.')} ${LANG === 'fi' ? `Rakennusrekisterin mukainen pääasiallinen lämmönlähde. Se kirjataan rakennushankeilmoituksesta, kun talo rakennetaan, joten se kertoo, millä lämmöllä talo rakennettiin: moni 1950-luvun öljy- tai hiilitalo on voitu sittemmin liittää kaukolämpöön tai vaihtaa maalämpöön. Ennen vuotta 1981 valmistuneilta tieto voi puuttua tai olla virheellinen. ${fmt(h.counts[0])} rakennukselta, valkoisina kartalla, lähdettä ei ole kirjattu; ne ovat enimmäkseen varastoja, vajoja, talousrakennuksia, kesämökkejä ja autotalleja. Kortti kertoo tarkan lähteen ja lämmitystavan.` : `The main heat source in the building register. It is recorded from the notice filed when a building is built, so it tells what a building was built to be heated with: many an oil- or coal-heated house of the 1950s may since have joined the district heating or turned to ground-source heat. For buildings completed before 1981 it may be missing or wrong. ${fmt(h.counts[0])} buildings, white on the map, have none recorded; most are storehouses, sheds, outbuildings, summer cottages and garages. The card gives the exact source and the heating method.`}</p>
+        <a class="src" href="${REGISTER_URL()}" target="_blank" rel="noopener">${t('Helsinki building register')}, CC BY 4.0</a>`;
+      panel.querySelectorAll('.swatch').forEach(b => b.onclick = () => {
+        const i = +b.dataset.i, m = maskTarget;
+        const solo = m.every((v, j) => (j === i) === !!v);
+        maskTarget = periods.map((_, j) => (solo || j === i) ? 1 : 0);
+        renderPanel(); drawHist();
+      });
+    } else if (mode === MODE.energy) {
       const e = config.energy;
       panel.innerHTML = `${sub}<div class="energy-scale">${e.labels.map((l, i) => row(ENERGY_COLORS[i + 1], l, e.counts[i + 1])).reverse().join('')}</div>
         <p class="note">${LANG === 'fi' ? `Rakennuksen viimeksi laaditun voimassa olevan energiatodistuksen luokka. Todistus tarvitaan, kun rakennus tai asunto myydään tai vuokrataan; yhden ja kahden asunnon talojen todistukset eivät ole julkisia. ${fmt(e.counts[0])} rakennuksella, valkoisina kartalla, ei ole julkista todistusta. Vuosien 2013 ja 2018 asteikoissa luokkien rajat ovat eri kohdissa.` : `The label of the building's latest energy certificate in force. A certificate is needed to sell or let a building or a flat; those of houses with one or two homes are not public. ${fmt(e.counts[0])} buildings, white on the map, have no public certificate. The 2013 and 2018 scales draw the class limits in different places.`}</p>
@@ -1803,17 +1954,17 @@ function renderPanel() {
         <p class="note">${LANG === 'fi' ? `HSY:n arvio vuoden sähköntuotosta, jos katon kaikki sopivat osat katettaisiin aurinkopaneeleilla (hyötysuhde 15 %). Arvio on vuodelta 2015, mutta lähes kaikille vuoden 2010 jälkeen valmistuneille se antaa nollan, joten niiltä se on jätetty pois. ${fmt(s.counts[0])} rakennuksella, valkoisina kartalla, ei ole arviota; ne ovat lähes kaikki pieniä talousrakennuksia tai vuoden 2010 jälkeen valmistuneita.` : `HSY's estimate of a year's electricity if every suitable part of the roof carried solar panels (15 % efficient). It dates from 2015 but gives nearly every building completed after 2010 zero, so those are left without one. ${fmt(s.counts[0])} buildings, white on the map, have no estimate; nearly all are small outbuildings or completed after 2010.`}</p>
         <a class="src" href="${SOLAR_URL()}" target="_blank" rel="noopener">${t('HSY solar potential')}, CC BY 4.0</a>`;
     }
-    panel.querySelectorAll('.sub button').forEach(b => b.onclick = () => { uniforms.uMode.value = +b.dataset.sub; renderPanel(); drawHist(); });
+    panel.querySelectorAll('.sub button').forEach(b => b.onclick = () => { setMode(+b.dataset.sub); renderPanel(); drawHist(); });
   } else if (activeLayer && activeLayer === residentsLayer) {
     const notes = Object.entries(residentsLayer?.notes || {});
     const people = notes.flatMap(([bag, n]) => n.people.map(p => ({ ...p, bag, at: n.at })))
-      .sort((a, b) => b.links - a.links);
+      .sort((a, b) => b.links - a.links || a.person.localeCompare(b.person, fmtLocale()));
     panel.innerHTML = `<button class="back">${t('All context layers')}</button><h2 class="layer-title">${esc(tr(residentsLayer, 'title'))}</h2>
       <p class="layer-intro">${esc(tr(residentsLayer, 'text') || '')}</p>
       <input class="filter" type="search" placeholder="${t('Find a person')}" aria-label="${t('Find a person')}">
-      <ul class="stories people">${people.map(p => `<li data-q="${esc((p.person + ' ' + (p.desc || '')).toLowerCase())}">
+      <ul class="stories people">${people.map(p => `<li data-q="${esc((p.person + ' ' + (tr(p, 'desc') || '') + ' ' + p.address).toLowerCase())}">
         <button class="story" data-bag="${p.bag}"><b>${esc(p.person)}</b>
-        <span>${[p.born && p.died ? `${p.born}–${p.died}` : p.born, p.desc].filter(Boolean).map(esc).join(', ')}</span>
+        <span>${[p.born && p.died ? `${p.born}–${p.died}` : p.born, tr(p, 'desc')].filter(Boolean).map(esc).join(', ')}</span>
         <span class="addr">${esc(p.address)}</span></button></li>`).join('')}</ul>
       ${residentsLayer?.caveat ? `<p class="caveat">${esc(tr(residentsLayer, 'caveat'))}</p>` : ''}`;
     panel.querySelector('.back').onclick = () => setLayer(null);
@@ -1882,11 +2033,16 @@ function setLayer(L) {
   renderPanel(); drawHist();
 }
 
+// The heat colouring isolates sources with the periods' mask: entering or leaving it shows every building again.
+function setMode(m) {
+  if ((m === MODE.heat) !== (uniforms.uMode.value === MODE.heat)) maskTarget = periods.map(() => 1);
+  uniforms.uMode.value = m;
+}
 document.querySelectorAll('.modes button[data-mode]').forEach(b => b.onclick = () => {
   if (photoOn) setPhoto(false);
   if (streetsOn) setStreets(false);
   if (viewOn) setView(false);
-  uniforms.uMode.value = +b.dataset.mode;
+  setMode(+b.dataset.mode);
   markTabs();
   const bits = Array(MAX_GROUPS).fill(-1);
   if (activeLayer) activeLayer.groups.forEach((g, i) => { if (groupOn[g.bit] !== false) bits[i] = g.bit; });
@@ -1905,8 +2061,10 @@ const T0 = Math.floor(config.yearMin / 50) * 50, T1 = config.yearMax + 1;
 const years = Object.entries(config.histogram).map(([y, v]) => [+y, v]);
 const demolished = Object.entries(config.demolished).map(([y, v]) => [+y, v]);  // they leave the count in these years
 const yMax = Math.max(...years.map(([, v]) => v.reduce((a, b) => a + b, 0)));
-const xOf = y => (y - T0) / (T1 - T0) * hist.clientWidth;
-const yearOf = x => Math.round(T0 + x / hist.clientWidth * (T1 - T0));
+// The timeline's years: the city's, or in the parking fines' view only theirs, a bar a year.
+const span = () => fineView() ? [fineView().span[0], fineView().span[1] + 1] : [T0, T1];
+const xOf = y => { const [a, b] = span(); return (y - a) / (b - a) * hist.clientWidth; };
+const yearOf = x => { const [a, b] = span(), y = a + x / hist.clientWidth * (b - a); return fineView() ? Math.floor(y) : Math.round(y); };
 
 function layerGroupsShown() {
   if (uniforms.uMode.value !== MODE.layers || !activeLayer) return [];
@@ -1916,6 +2074,10 @@ function layerGroupsShown() {
 function visibleCount() {
   const Y = uniforms.uYear.value;
   if (uniforms.uMode.value === MODE.gone) return demolished.reduce((n, [y, v]) => n + (y <= Y ? v.reduce((a, b) => a + b, 0) : 0), 0);
+  // a heat source seen alone: those of it built by then, less the torn down, who all have none recorded
+  if (uniforms.uMode.value === MODE.heat && !maskTarget.every(Boolean))
+    return Object.entries(config.heat.years).reduce((n, [y, v]) => n + (+y <= Y ? v.reduce((a, c, i) => a + (maskTarget[i] ? c : 0), 0) : 0), 0)
+      - (maskTarget[0] ? demolished.reduce((n, [y, v]) => n + (y <= Y ? v.reduce((a, b) => a + b, 0) : 0), 0) : 0);
   const shown = layerGroupsShown();
   if (shown.length) return shown.reduce((n, g) => n + Object.entries(g.years).reduce((m, [y, c]) => m + (+y <= Y ? c : 0), 0), 0);
   let n = 0;
@@ -1930,6 +2092,7 @@ function drawHist() {
   hist.width = w * dpr; hist.height = h * dpr;
   hctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   hctx.clearRect(0, 0, w, h);
+  if (fineView()) return drawFineYears(fineView(), w, h);
   const plotH = h - 20, bw = Math.max(1, w / (T1 - T0));
   const Y = uniforms.uYear.value, Yf = uniforms.uYearFrom.value;
   const shown = layerGroupsShown();
@@ -1980,18 +2143,37 @@ function drawHist() {
   document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t(uniforms.uMode.value === MODE.gone ? 'torn down' : 'buildings');
 }
 
+// The parking fines' timeline: a bar a year, as tall as the year's fines, the year shown in full; the tally counts them.
+function drawFineYears(E, w, h) {
+  const plotH = h - 20, Y = Math.floor(uniforms.uYear.value), [a, b] = E.span, d = E.data;
+  const max = d ? Math.max(...d.totals) : 1;
+  hctx.font = '500 11px "Schibsted Grotesk", sans-serif';
+  for (let y = a; y <= b; y++) {
+    const x0 = xOf(y) + 2, x1 = xOf(y + 1) - 2, bh = d ? d.totals[y - a] / max * (plotH - 6) : 0;
+    hctx.globalAlpha = y === Y ? 1 : 0.3;
+    hctx.fillStyle = FINE_COLORS[4];
+    hctx.fillRect(x0, plotH - bh, x1 - x0, bh);
+    hctx.globalAlpha = 1;
+    hctx.fillStyle = y === Y ? '#000' : '#5d6266';
+    if (w >= 500 || (y - a) % 2 === 0 || y === Y) hctx.fillText(y, (x0 + x1) / 2 - 13, h - 4);
+  }
+  document.getElementById('year').textContent = Y;
+  document.getElementById('count').textContent = d ? fmt(d.totals[Y - a]) : '';
+  document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t('fines');
+}
+
 let handle = null;
 hist.addEventListener('pointerdown', e => {
   hist.setPointerCapture(e.pointerId);
   const x = e.offsetX;
-  handle = Math.abs(x - xOf(uniforms.uYearFrom.value)) < Math.abs(x - xOf(uniforms.uYear.value)) ? 'uYearFrom' : 'uYear';
+  handle = !fineView() && Math.abs(x - xOf(uniforms.uYearFrom.value)) < Math.abs(x - xOf(uniforms.uYear.value)) ? 'uYearFrom' : 'uYear';
   moveHandle(x);
   stopPlay();
 });
 hist.addEventListener('pointermove', e => handle && moveHandle(e.offsetX));
 hist.addEventListener('pointerup', () => handle = null);
 function moveHandle(x) {
-  const y = Math.max(T0, Math.min(config.yearMax, yearOf(x)));
+  const [a, b] = span(), y = Math.max(a, Math.min(Math.min(b - 1, config.yearMax), yearOf(x)));
   if (handle === 'uYear') uniforms.uYear.value = Math.max(y, uniforms.uYearFrom.value + 1);
   else uniforms.uYearFrom.value = Math.min(y, uniforms.uYear.value - 1);
   drawHist();
@@ -2003,12 +2185,13 @@ const playBtn = document.getElementById('play');
 const playIcon = document.getElementById('play-icon');
 const DURATION = (+new URLSearchParams(location.search).get('film') || 30) * 1000; // ?film=6 for a short film
 function playYear(t) {
+  if (fineView()) { const [a, b] = span(); return a + (b - a) * Math.min(t, 0.9999); }  // the fines' years, each as long
   const k = 0.35; // share of time spent before 1850
   return t < k ? T0 + (1850 - T0) * (t / k) : 1850 + (config.yearMax - 1850) * ((t - k) / (1 - k));
 }
 function startPlay() {
   playing = true; playStart = performance.now();
-  if (uniforms.uYear.value >= config.yearMax) uniforms.uYear.value = T0;
+  if (uniforms.uYear.value >= Math.min(span()[1] - 1, config.yearMax)) uniforms.uYear.value = span()[0];
   playT0 = 0;
   while (playT0 < 1 && playYear(playT0) < uniforms.uYear.value) playT0 += 0.001;
   playIcon.setAttribute('d', 'M4 2.5h3v11H4zM9 2.5h3v11H9z');
@@ -2019,7 +2202,7 @@ function stopPlay() {
   playing = false;
   uniforms.uPlaying.value = 0;
   uniforms.uRise.value = 0.01;
-  uniforms.uYear.value = Math.round(uniforms.uYear.value);
+  uniforms.uYear.value = (fineView() ? Math.floor : Math.round)(uniforms.uYear.value);
   playIcon.setAttribute('d', 'M4 2.5v11l9-5.5z');
   playBtn.setAttribute('aria-label', "Play the city's growth");
 }
@@ -2066,6 +2249,7 @@ function setLang(l) {
   applyStaticText(); renderPanel(); drawHist();
   if (pinnedGid >= 0) pinCard(pinnedGid, ...lastPin);
   else if (pinnedStreet) pinStreet(pinnedStreet, ...lastPin);
+  else if (pinnedSite?.street) pinFine(pinnedSite.era, pinnedSite.name, ...lastPin);
   else if (pinnedSite) pinSite(pinnedSite, ...lastPin);
   if (quest && !questEl.hidden && !questEl.classList.contains('done')) renderQuest();
   if (questsDlg.open) renderQuestList();

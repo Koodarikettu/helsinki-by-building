@@ -9,6 +9,8 @@ RAKEAINE  c_rakeaine, JULKISIVU c_julkisivu: Helsinki's own lists RA_KANTRAKAINE
           English from the national Ryhti lists on koodistot.suomi.fi (kantavanrakenteenrakennusaine,
           julkisivunrakennusaine), matched by Finnish label; Ryhti numbers its codes differently.
 TYYPPI    tyyppi, the base map's building type, for buildings without a register class. English is ours.
+LAMMONLAHDE c_poltaine, LAMMITYSTAPA c_lammtapa: Helsinki's lists RA_LAMMONLAHDE and RA_LAMMITYSTAPA in the same
+          document; English is ours. HEAT groups the sources for the map's colouring, 0 where none is recorded.
 """
 KAYTTARK = {
     "011": ("Yhden asunnon talot", "One-dwelling houses"),
@@ -133,3 +135,17 @@ TYYPPI = {
     "Lato": ("Lato", "Barn"),
     "Väestönsuoja": ("Väestönsuoja", "Civil defence shelter"),
 }
+
+LAMMONLAHDE = {1: ("Kauko- tai aluelämpö", "District heating"), 2: ("Kevyt polttoöljy", "Light fuel oil"),
+               3: ("Raskas polttoöljy", "Heavy fuel oil"), 4: ("Sähkö", "Electricity"), 5: ("Kaasu", "Gas"),
+               6: ("Kivihiili, koksi tms.", "Coal, coke or the like"), 7: ("Puu", "Wood"), 8: ("Turve", "Peat"),
+               9: ("Maalämpö tms.", "Ground-source heat or the like"), 10: ("Muu", "Other")}
+
+LAMMITYSTAPA = {1: ("Vesikeskuslämmitys", "Central heating, water"), 2: ("Ilmakeskuslämmitys", "Central heating, air"),
+                3: ("Suora sähkölämmitys", "Direct electric heating"), 4: ("Uunilämmitys", "Stoves"),
+                5: ("Ei kiinteää lämmityslaitetta", "No fixed heating")}
+
+# The colouring's groups: (sources, Finnish, English). Oil of both kinds is one; wood, coal, gas, peat and the rest,
+# some 2,200 buildings together, share the last, so that five colours stay apart for colour-blind eyes too.
+HEAT = [((1,), "Kaukolämpö", "District heating"), ((4,), "Sähkö", "Electricity"), ((9,), "Maalämpö", "Ground-source heat"),
+        ((2, 3), "Öljy", "Oil"), ((5, 6, 7, 8, 10), "Puu, hiili, kaasu tai muu", "Wood, coal, gas or other")]

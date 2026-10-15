@@ -1,7 +1,7 @@
 """Self-check for placing the Heritage Agency's photos: uv run python -m pipeline.test_s12"""
 from shapely.geometry import Point
 
-from .s12_other import place_of
+from .s12_other import place_of, reason, street_key, street_of
 
 addr = {"unioninkatu 30": (1.0, 2.0)}
 named = {"säätytalo": Point(3, 4)}
@@ -23,4 +23,15 @@ pt = lambda name: {"subjectPlaces": [f"Suomi, Helsinki, {name}"], "geoLocations"
 assert place_of(pt("Esplanadi"), addr, named, spot, gk25, box, {"kallio"})[0] == "Esplanadi"
 assert place_of(pt("Kallio Helsinki"), addr, named, spot, gk25, box, {"kallio"}) is None
 assert place_of(pt("Suomenlinna"), addr, named, spot, gk25, box, {"suomenlinna"})[0] == "Suomenlinna"
+# a parking fine's main reason, without its code; a second reason after it is dropped
+assert reason("0601 pysäköinti ilman p-tunnusta/p-laitetta/p-lippua ") == "Pysäköinti ilman p-tunnusta/p-laitetta/p-lippua"
+assert reason("0401 Pysäköintikieltoalue liikennemerkin noudattamatta jättäminen 1501 Pysäköinti jalkakäytävälle") == \
+    "Pysäköintikieltoalue liikennemerkin noudattamatta jättäminen"
+assert reason("1302 Pysäköinti 5 m matkalle ennen suojatietä ") == "Pysäköinti 5 m matkalle ennen suojatietä"  # 5 m is no code
+# the fines' streets and the street areas' write some names differently
+assert street_key("Kolmas linja") == street_key("Kolmas Linja") and street_key("Katajanokanlaituri") == street_key("Katajanokan laituri")
+assert street_key("Tarkk'ampujankatu") == street_key("Tarkk'Ampujankatu") and street_key("Kauppakatu") != street_key("Kauppatori")
+assert street_key("Castréninkatu") == street_key("Castreninkatu") and street_key("Mäkitie") != street_key("Makitie")
+assert street_of("Fredrikinkatu 12 A") == "Fredrikinkatu" and street_of("Tilkantori (tori tai aukio)") == "Tilkantori"
+assert street_of("Kauppatori") == "Kauppatori" and street_of(None) == ""
 print("ok")

@@ -5,6 +5,7 @@ Tile layout (little-endian, every section 4-byte aligned):
   header  u32 magic, nB, nP, nR, nV; f32 originX, originZ
   B       u32 gid[nB]; i16 year[nB]; i16 gone[nB] (year of demolition, 0 if standing); u8 flag[nB]; u8 period[nB]; u8 floors[nB]; u8 energy[nB] (label, 1–7 = G…A, 0 = none);
           u8 solar[nB] (yearly solar potential: 0 none, 1 zero, 2… up the steps in SOLAR_MWH);
+          u8 heat[nB] (heat source in the register, a group of codes.HEAT counted from 1; 0 none recorded);
           u32 lay0[nB]; u32 lay1[nB] (context layer bits, see s05_layers); u32 partStart[nB+1]
   P       f32 height[nP]; u32 ringStart[nP+1]
   R       u32 vertStart[nR+1]; u8 hole[nR]
@@ -20,7 +21,7 @@ import pandas as pd
 import shapely
 from pyproj import Transformer
 
-from .codes import JULKISIVU, KAYTTARK, RAKEAINE, TYYPPI
+from .codes import HEAT, JULKISIVU, KAYTTARK, LAMMITYSTAPA, LAMMONLAHDE, RAKEAINE, TYYPPI
 from .periods import PERIODS
 
 ORIGIN = Transformer.from_crs(4326, 3879, always_xy=True).transform(24.9527, 60.1694)  # Senaatintori, ETRS-GK25
@@ -52,12 +53,12 @@ def rings_of(geom):
 
 
 def pack_tile(origin, rows):
-    gid, year, gone, flag, period, floors, energy, solar, lay0, lay1, part_start = [], [], [], [], [], [], [], [], [], [], [0]
+    gid, year, gone, flag, period, floors, energy, solar, heat, lay0, lay1, part_start = [], [], [], [], [], [], [], [], [], [], [], [0]
     heights, ring_start, vert_start, holes, verts = [], [0], [0], [], []
     for b in rows:
         gid.append(b["gid"]); year.append(b["year"]); gone.append(b["gone"]); flag.append(b["flag"])
         period.append(b["period"]); floors.append(b["floors"])
-        lay0.append(b["lay0"]); lay1.append(b["lay1"]); energy.append(b["energy"]); solar.append(b["solar"])
+        lay0.append(b["lay0"]); lay1.append(b["lay1"]); energy.append(b["energy"]); solar.append(b["solar"]); heat.append(b["heat"])
         for h, geom in b["parts"]:
             heights.append(h)
             for ring, hole in rings_of(geom):
@@ -80,6 +81,7 @@ def pack_tile(origin, rows):
     out += pad4(np.array(floors, "u1").tobytes())
     out += pad4(np.array(energy, "u1").tobytes())
     out += pad4(np.array(solar, "u1").tobytes())
+    out += pad4(np.array(heat, "u1").tobytes())
     out += np.array(lay0, "<u4").tobytes() + np.array(lay1, "<u4").tobytes()
     out += pad4(np.array(part_start, "<u4").tobytes())
     out += pad4(np.array(heights, "<f4").tobytes())
@@ -97,6 +99,9 @@ def main():
     b["energy"] = b.eclass.fillna(0).astype(int)
     mwh = b.solar_kwh / 1000
     b["solar"] = np.where(mwh.isna(), 0, np.where(mwh > 0, 2 + np.searchsorted(SOLAR_MWH, mwh.fillna(0)), 1))
+    code = lambda col, table: pd.to_numeric(col, errors="coerce").where(lambda c: c.isin(table.keys())).fillna(0).astype(int)
+    b["fuel"], b["hmethod"] = code(b.c_poltaine, LAMMONLAHDE), code(b.c_lammtapa, LAMMITYSTAPA)
+    b["heat"] = b.fuel.map({c: i + 1 for i, (codes, *_) in enumerate(HEAT) for c in codes}).fillna(0).astype(int)
     # One part per polygon: the viewer roofs a part as a single outline with holes.
     geoms = shapely.simplify(shapely.make_valid(b.geometry.values), SIMPLIFY, preserve_topology=True)
     parts = [[(h, g) for g in getattr(geom, "geoms", [geom]) if g.geom_type == "Polygon" and not g.is_empty]
@@ -112,7 +117,8 @@ def main():
         origin = np.array([tx * TILE, tz * TILE])
         rows = [dict(gid=r.Index, year=int(r.year), gone=int(r.gone), flag=int(r.date_flag),
                      period=int(r.period), floors=int(r.floors),
-                     lay0=int(r.lay0), lay1=int(r.lay1), energy=int(r.energy), solar=int(r.solar), parts=parts[r.Index])
+                     lay0=int(r.lay0), lay1=int(r.lay1), energy=int(r.energy), solar=int(r.solar), heat=int(r.heat),
+                     parts=parts[r.Index])
                 for r in grp.itertuples()]
         data = pack_tile(origin, rows)
         name = f"{tx}_{tz}.bin"
@@ -142,7 +148,8 @@ def main():
     attrs = np.zeros(len(b), dtype=[("h", "<u2"), ("fsrc", "u1"), ("flag", "u1"), ("year", "<i2"), ("orig", "<i2"),
                                     ("lay0", "<u4"), ("lay1", "<u4"), ("wk", "<i4"), ("use", "u1"), ("floors", "u1"), ("mat", "u1"),
                                     ("fac", "u1"), ("x", "<f4"), ("z", "<f4"), ("gone", "<i2"),
-                                    ("eclass", "u1"), ("ever", "u1"), ("eluku", "<u2"), ("solar", "<i4"), ("panel", "<u2")])
+                                    ("eclass", "u1"), ("ever", "u1"), ("eluku", "<u2"), ("solar", "<i4"), ("panel", "<u2"),
+                                    ("fuel", "u1"), ("hmethod", "u1")])
     attrs["h"] = np.round(b.height * 10).clip(0, 65535)
     attrs["fsrc"] = b.floors_src + 2 * b.height_src; attrs["flag"] = b.date_flag; attrs["floors"] = b.floors
     attrs["year"] = b.year; attrs["orig"] = b.orig; attrs["gone"] = b.gone
@@ -150,12 +157,12 @@ def main():
     # Energy: the label, its scale (13 or 18) and E-value; solar: kWh a year (-1 without an estimate), m² of panels.
     attrs["eclass"] = b.energy; attrs["ever"] = b.ever.fillna(0); attrs["eluku"] = b.eluku.fillna(0).clip(0, 65535)
     attrs["solar"] = b.solar_kwh.round().fillna(-1); attrs["panel"] = b.panel_m2.round().fillna(0).clip(0, 65535)
+    attrs["fuel"], attrs["hmethod"] = b.fuel, b.hmethod  # heat source and heating method, codes of the register
     attrs["wk"] = b.key.map(pd.read_parquet("data/wiki_index.parquet").set_index("key").wk).fillna(-1).astype(int)
     # Use: the register's class (Rakennusluokitus 1994) where the building has one, else the map's building type.
     use_key = b.c_kayttark.where(b.c_kayttark.isin(KAYTTARK), b.tyyppi)
     uses = sorted(use_key.dropna().unique())
     attrs["use"] = use_key.map({k: i + 1 for i, k in enumerate(uses)}).fillna(0)
-    code = lambda col, table: pd.to_numeric(col, errors="coerce").where(lambda c: c.isin(table.keys())).fillna(0)
     attrs["mat"] = code(b.c_rakeaine, RAKEAINE); attrs["fac"] = code(b.c_julkisivu, JULKISIVU)
     cen = to_local(np.c_[b.geometry.centroid.x, b.geometry.centroid.y])
     attrs["x"], attrs["z"] = cen[:, 0], cen[:, 1]
@@ -184,6 +191,11 @@ def main():
         # Counted among the buildings standing today
         energy=dict(labels=list("GFEDCBA"), counts=np.bincount(b.energy[b.gone == 0], minlength=8).tolist()),
         solar=dict(steps=SOLAR_MWH, counts=np.bincount(b.solar[b.gone == 0], minlength=len(SOLAR_MWH) + 3).tolist()),
+        heat=dict(groups=[label(fi, en) for _, fi, en in HEAT], counts=np.bincount(b.heat[b.gone == 0], minlength=len(HEAT) + 1).tolist(),
+                  # by year completed, for the tally when one source is seen alone
+                  years={str(y): np.bincount(g, minlength=len(HEAT) + 1).tolist() for y, g in b.heat.groupby(b.year)}),
+        fuels={str(k): label(*v) for k, v in LAMMONLAHDE.items()},
+        methods={str(k): label(*v) for k, v in LAMMITYSTAPA.items()},
         attrStride=attrs.dtype.itemsize,
         archive=(OUT / "archive").exists(),  # archive photos, a later step
         uses=[label(*(KAYTTARK.get(k) or TYYPPI.get(k, (k, k)))) for k in uses],

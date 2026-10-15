@@ -128,6 +128,32 @@ def wikipedia():
     return out
 
 
+@layer(
+    id="residents", section="Discover", section_fi="Löydä", era="", era_fi="",
+    title="Who lived here", title_fi="Kuka asui täällä",
+    text=("Writers, artists, scientists and statesmen whose Finnish Wikipedia article names the Helsinki address where "
+          "they lived, were born, died or worked, and the buildings Wikidata ties to a person. Pick a name to fly to the "
+          "house; its card quotes the article."),
+    text_fi=("Kirjailijat, taiteilijat, tiedemiehet ja valtiomiehet, joiden suomenkielinen Wikipedia-artikkeli kertoo "
+             "helsinkiläisen osoitteen, jossa he asuivat, syntyivät, kuolivat tai työskentelivät, sekä rakennukset, jotka "
+             "Wikidata liittää henkilöön. Napsauta nimeä, niin kartta vie taloon; kortti lainaa artikkelia."),
+    caveat=("Found automatically in the articles and matched to today's address: house numbers have sometimes changed, "
+            "and a house may have been rebuilt since; the card says so when the building is newer than the person."),
+    caveat_fi=("Poimittu automaattisesti artikkeleista ja liitetty nykyiseen osoitteeseen: talonnumerot ovat joskus "
+               "muuttuneet, ja talo on voitu rakentaa uudelleen; kortti kertoo, jos rakennus on henkilöä nuorempi."),
+    source=("Finnish Wikipedia and Wikidata", "Suomenkielinen Wikipedia ja Wikidata", "https://fi.wikipedia.org"),
+    groups=[("res", "Home of a well-known person", "Tunnetun henkilön koti")],
+)
+def residents():
+    """s13_residents' rows, one note per building with everyone known to have lived there."""
+    keys, out = set(buildings().key), {}
+    for r in json.loads(Path("data/residents.json").read_text()):
+        if r["key"] in keys:
+            n = out.setdefault(r["key"], ("res", {"name": r["person"], "people": []}))[1]
+            n["people"].append({k: r[k] for k in ("person", "born", "died", "desc", "desc_fi", "quote", "url", "links", "address")})
+    return out
+
+
 def main():
     b = buildings()
     c = to_local(np.c_[b.geometry.centroid.x, b.geometry.centroid.y]).round(1)

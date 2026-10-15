@@ -8,10 +8,13 @@ from shapely.geometry import box
 
 from . import s07_labels as s07
 
-text = {"Liisankatu": "1819 muodossa Elisabeths Gatan. Suomenkielisenä nimenä karttaliitteessä 1866 Eliisapetinkatu."}
-got = s07.former({"Liisankatu": [["Elisabeths Gatan", "1819"], ["Elisabetinkatu", "1880-luvulla"]],  # not in its text
-                  "Kauhavankuja": [["Kauhavan kuja", "1923"]]}, text)                             # no text at all
-assert got == {"Liisankatu": [["Elisabeths Gatan", "1819"]]}, got
+text = {"Liisankatu": "1819 muodossa Elisabeths Gatan. Suomenkielisenä nimenä karttaliitteessä 1866\n Eliisapetinkatu."}
+got = s07.former({"Liisankatu": [["Elisabeths Gatan", "1819", "1819 muodossa Elisabeths Gatan."],
+                                 ["Eliisapetinkatu", "1866", "karttaliitteessä 1866 Eliisapetinkatu."],  # across a line break
+                                 ["Elisabetinkatu", "1880-luvulla", "1880-luvulla Elisabetinkatu"],  # not in its text
+                                 ["Gatan", "1819", "Suomenkielisenä nimenä"]],  # its passage does not name it
+                  "Kauhavankuja": [["Kauhavan kuja", "1923", "1923 Kauhavan kuja"]]}, text)  # no text at all
+assert got == {"Liisankatu": [["Elisabeths Gatan", "1819"], ["Eliisapetinkatu", "1866"]]}, got
 
 s07.OUT = Path(tempfile.mkdtemp())
 streets = gpd.GeoDataFrame({"kadun_nimi": ["Bkatu", "Akatu", "Ckatu", "Akatu"]},

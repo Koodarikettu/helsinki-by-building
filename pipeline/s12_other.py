@@ -8,8 +8,10 @@
   that can be found: an address; a building that Wikidata names ("Säätytalo"); a square, park, island or street in
   the city's place-name register ("Senaatintori Helsinki"); or a point Finna gives other than the city's centre. A
   photo naming only the city or a district is left out: it would pile up on the district's middle. One dot per place.
+- Parking fines: the city's parking fines and notices of 2014–2023 (Pysäköintivirheet Helsingissä, CC BY 4.0), by the
+  street of their address, for the streets of the street-name view to be coloured by them year by year.
 
-Writes web/data/other.json and web/data/trams.bin:
+Writes web/data/other.json, web/data/fines.json (the parking fines by street and year) and web/data/trams.bin:
   u32 nLines, u32 nVerts, u32 start[nLines + 1], i16 opened[nLines], i16 closed[nLines] (0: never, or not known;
   padded to 4), f32 xz[2 * nVerts] (local frame).
 """
@@ -17,6 +19,7 @@ import csv
 import json
 import re
 import zlib
+from collections import Counter
 from pathlib import Path
 
 import geopandas as gpd
@@ -49,6 +52,13 @@ COARSE = {"helsinki", "suomi", "vantaa", "espoo", "helsingin maalaiskunta", "hel
 ISLANDS = {"suomenlinna", "santahamina"}
 OHM = dict(label="OpenHistoricalMap, Helsinki's tram tracks", label_fi="OpenHistoricalMap, Helsingin raitiotiet",
            url="https://www.openhistoricalmap.org/", licence="CC0")
+FINES = dict(label="City of Helsinki, parking violations", label_fi="Helsingin kaupunki, pysäköintivirheet",
+             url="https://hri.fi/data/en_GB/dataset/pysakointivirheet-helsingissa",
+             url_fi="https://hri.fi/data/fi/dataset/pysakointivirheet-helsingissa", licence="CC BY 4.0")
+# Fines on a street in a year, from this many up, and fines per 100 metres of street: the colouring's steps (its
+# colours are web/app.js FINE_COLORS).
+FINE_STEPS = [1, 10, 25, 50, 100, 250, 500]
+FINE_DENSE = [0, 2, 5, 10, 25, 50, 100]
 
 
 def art() -> dict:
@@ -217,11 +227,121 @@ def mv_photos() -> dict:
         caveat_fi=("Useimmat Museoviraston Helsinki-kuvista nimeävät vain kaupungin tai kaupunginosan, ja ne on jätetty pois. "
                    "Kuva on nimeämässään paikassa, joka voi olla kuvan kohde eikä kuvauspaikka. Vuosi on Finnan, ja joskus "
                    "se on kuvatun kohteen vuosi."),
-        kinds=[dict(id="mv", label="Places with photos", label_fi="Kuvauspaikat", color="#0a7d8c", menu=False, list=True, source=MV, sites=sites)])
+        kinds=[dict(id="mv", label="Places with photos", label_fi="Kuvauspaikat", color="#0a7d8c", menu=False, list=True, source=MV,
+                    sites=sites, shards="mvphotos")])
+
+
+def reason(field: str) -> str:
+    """'0601 pysäköinti ilman p-tunnusta ' → 'Pysäköinti ilman p-tunnusta': the main reason without its code; a few
+    fields carry a second reason after it."""
+    r = re.split(r"\s+\d{3,4}\s+", re.sub(r"^\d+\s*", "", field).strip())[0]
+    return r[:1].upper() + r[1:]
+
+
+ACUTE = str.maketrans("éèáàíóú", "eeaaiou")  # not ä, ö or å: Mäkitie is not Makitie
+
+
+def street_key(name: str) -> str:
+    """A street's name to match on: the registers write 'Kolmas linja' and 'Kolmas Linja', 'Katajanokanlaituri' and
+    'Katajanokan laituri', 'Tarkk'ampujankatu' and 'Tarkk'Ampujankatu', 'Castréninkatu' and 'Castreninkatu'."""
+    return re.sub(r"[\s'’-]", "", name.lower().translate(ACUTE))
+
+
+def street_of(address: str) -> str:
+    """'Fredrikinkatu 12 A' → 'Fredrikinkatu'; 'Tilkantori (tori tai aukio)' → 'Tilkantori'."""
+    return re.sub(r"\s+\d.*$", "", re.sub(r"\s*\(.*?\)", "", address or "").strip())
+
+
+# Street areas that run beside a street's carriageway rather than along it: counted only for a street that has no other
+SIDE = {"Kevyt liikenne", "Kevyt liikenne, t/h", "Erillinen kev.liik.väylä", "Pysäköintialue", "Tontti"}
+
+
+def street_lengths() -> dict:
+    """{street: metres}, for its fines per 100 m: its built street areas' own lengths (pituus), or an area's size over
+    its mean width where it gives none, summed. A cycle and foot way or a parking area beside the carriageway counts
+    only for a street that is nothing else: summed with it, Eteläinen Rautatiekatu would run 1,960 m, not 640."""
+    areas = gpd.read_file(RAW / "YLRE_Katualue_alue.geojson")
+    areas = areas[areas.geometry.notna() & (areas.rakentamisen_tila != "Rakentamaton")]
+    areas["m"] = areas.pituus.where(areas.pituus > 0, areas.geometry.area / areas.keskim_leveys.where(areas.keskim_leveys > 0))
+    areas["main"] = ~areas.kayttotarkoitus.isin(SIDE) & areas.m.notna()
+    has_main = areas.groupby("kadun_nimi").main.transform("any")
+    m = areas[areas.main | ~has_main].groupby("kadun_nimi").m.sum(min_count=1)
+    return {k: round(v) for k, v in m.items() if v == v and v > 0}
+
+
+def fine_rows():
+    """(year, address, reason) of every parking fine: the yearly files of 2014–2022 (CSV, Latin-1 or UTF-8, ';' or ',')
+    and 2023 from the WFS, less those it marks as not at their real place (filed under the parking control's address)."""
+    for path in sorted((RAW / "fines").glob("*.csv")):
+        raw = path.read_bytes()
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw.decode("latin-1")
+        rows = csv.reader(text.splitlines(), delimiter=";" if text.split("\n", 1)[0].count(";") > 3 else ",")
+        next(rows)
+        for r in rows:  # month, year, address, stage, reason, …
+            if len(r) > 4 and r[1].isdigit():
+                yield int(r[1]), r[2], r[4]
+    for f in json.loads((RAW / "Pysakointivirheet.geojson").read_text())["features"]:
+        r = f["properties"]
+        if r["todellinen_sijainti"] == "Kyllä":
+            yield int(r["vuosi"]), r["osoite"], r["virheen_paasyy_ja_paaluokka"]
+
+
+def fines() -> dict:
+    """The parking fines of 2014–2023 by the street of their address, matched to the street areas of the street-name
+    view (s07_labels' streetmap.json), for the streets to be coloured by them year by year."""
+    names = json.loads((OUT / "streetmap.json").read_text())["names"]
+    match = {street_key(n): n for n in names}
+    per, totals = {}, Counter()
+    for year, addr, why in fine_rows():
+        totals[year] += 1
+        name = match.get(street_key(street_of(addr)))
+        if name:
+            per.setdefault((name, year), Counter())[reason(why) if why else ""] += 1
+    years = sorted(totals)
+    reasons = sorted({w for c in per.values() for w in c if w})
+    code = {w: i for i, w in enumerate(reasons)}
+    streets = {}
+    for (name, year), c in per.items():  # per year: the count, then the three commonest reasons and their counts
+        top = [x for w, k in c.most_common() if w for x in (code[w], k)][:6]
+        streets.setdefault(name, [[] for _ in years])[years.index(year)] = [sum(c.values()), *top]
+    mapped = [sum(v[i][0] for v in streets.values() if v[i]) for i in range(len(years))]
+    lengths = street_lengths()
+    # Some 4,400 streets × ten years would add a megabyte to the page's start: they come when the view first opens.
+    (OUT / "fines.json").write_text(json.dumps(dict(years=years, reasons=reasons, totals=[totals[y] for y in years],
+                                                    mapped=mapped, streets=streets, lengths=lengths),
+                                               ensure_ascii=False, separators=(",", ":")))
+    span = f"{years[0]}–{years[-1]}"
+    share = [round(100 * (1 - m / totals[y])) for m, y in zip(mapped, years)]
+    left = f"{min(share)}–{max(share)}" if min(share) != max(share) else str(share[0])
+    return dict(
+        id="fines", menu="other", label="Parking fines", label_fi="Pysäköintivirheet", years=span, years_fi=span,
+        streets="fines.json", steps=FINE_STEPS, dense=FINE_DENSE, span=[years[0], years[-1]],
+        text=(f"The parking fines and notices the city's parking inspectors and the police wrote in {span}, on the street of "
+              "the address each was written to. A street is coloured by its fines in the year shown, the more the redder, "
+              "by all its fines or by its fines per 100 metres, so that a short street fined often stands out beside a "
+              "long one; pick a year on the timeline. A click on a street gives its fines year by year and the year's "
+              "commonest reasons."),
+        text_fi=(f"Pysäköinninvalvonnan ja poliisin vuosina {span} kirjoittamat pysäköintivirhemaksut ja huomautukset sen "
+                 "kadun mukaan, jonka osoitteeseen maksu kirjattiin. Katu on värjätty näytetyn vuoden maksujen mukaan, "
+                 "sitä punaisempi mitä enemmän maksuja, joko kaikkien maksujen tai 100 metriä kohden laskettujen mukaan, "
+                 "jolloin lyhyt usein sakotettu katu erottuu pitkän rinnalla; valitse vuosi aikajanalta. Katua "
+                 "napsauttamalla näet sen maksut vuosittain ja vuoden yleisimmät syyt."),
+        caveat=(f"{left} % of a year's fines have no address, or one on a street that is not among the city's street areas "
+                "(a square, a park, a private lane), and are left out; so are the 2023 fines the register marks as not at "
+                "their real place. A street's length is that of its street areas, which may run past the kerb into a "
+                "square or a crossing."),
+        caveat_fi=(f"Vuoden maksuista {left} % on vailla osoitetta tai kirjattu kadulle, joka ei ole kaupungin katualueissa "
+                   "(tori, puisto, yksityinen kuja), ja ne on jätetty pois, samoin vuoden 2023 maksut, joiden sijainti ei "
+                   "rekisterin mukaan ole todellinen. Kadun pituus on sen katualueiden pituus, johon voi kuulua osa aukiota "
+                   "tai risteystä."),
+        kinds=[dict(id="streets", label="Streets", label_fi="Kadut", color="#191e6a", menu=False, list=False, source=FINES, sites=[])])
 
 
 def main():
-    eras = [art(), trams(), mv_photos()]
+    eras = [art(), trams(), mv_photos(), fines()]
     (OUT / "other.json").write_text(json.dumps(dict(eras=eras), ensure_ascii=False, separators=(",", ":")))
     for e in eras:
         print(e["id"], {k["id"]: len(k["sites"]) for k in e["kinds"]})

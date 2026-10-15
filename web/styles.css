@@ -146,6 +146,7 @@ h1 { margin: 0; font-size: clamp(34px, 4.4vw, 56px); font-weight: 800; letter-sp
 .card .photo figcaption { font-size: 11px; color: var(--muted); padding: 5px 16px 0; }
 /* Photos through the years: today's first, then the archive; the year sits on the picture, tabs below jump. */
 .card .photo .frame { position: relative; }
+.card .photo.loading img { opacity: .35; transition: opacity .2s; }
 .card .photo .year { position: absolute; left: 10px; bottom: 8px; background: var(--ink); color: var(--paper);
   font-size: 12px; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-variant-numeric: tabular-nums; }
 .card .photo .prev, .card .photo .next { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px;
@@ -225,10 +226,12 @@ body.photo .panel, body.photo .timeline, body.photo .tally, body.questing .stree
 .ground-box.folded .box-fold::after { transform: rotate(45deg); margin-top: -3px; }
 .ground-box .ground-name { margin: 8px 0 0; color: var(--ink); font-weight: 600; }
 .ground-years { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.fine-alone { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; font-weight: 600; cursor: pointer; }
+.fine-alone input { margin: 0; accent-color: var(--ink); }
 .noise-scale { display: flex; margin-top: 8px; font-size: 10px; color: var(--muted); text-align: center; }
 .noise-scale span { flex: 1; }
 .noise-scale i { display: block; height: 10px; margin-bottom: 2px; }
-.ground-box .ground-years button { padding: 3px 0; border-radius: 4px; background: var(--sky); color: var(--ink); font-weight: 500;
+.ground-years button { padding: 3px 0; border: 0; border-radius: 4px; font: inherit; cursor: pointer; background: var(--sky); color: var(--ink); font-weight: 500;
   font-variant-numeric: tabular-nums; }
 .ground-years button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .ground-box label { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-weight: 600; cursor: pointer; }
