@@ -5,7 +5,8 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
 - **Colourings.** By the period a building was completed, by its floors, by its energy label, or by how much solar
   power its roof could give.
 - **Back in time.** The timeline plays the city's growth. Go back and the 4,800 buildings demolished since 2008 stand
-  again, paler, and the city's old maps (1749–1925) and aerial photos (1932–2025) can lie under them.
+  again, paler, and the city's old maps (1749–1925) and aerial photos (1932–2025) can lie under them, or be seen
+  alone with the buildings hidden.
 - **Context layers.** The protection the city's plans give a building, the national heritage areas (RKY) it stands
   in, and the buildings in Wikipedia.
 - **The building's card.** Use, height, floors, structure and facade, architect and style, the Wikipedia extract,
@@ -165,6 +166,8 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   2017, 2021 and 2025. The other years cover only a strip of the city or leave holes, as measured on an overview of
   each layer; the 1800s plan is too faint to read. The server paints black outside a map's sheet and where a photo
   has nothing, and the map leaves black out. The maps are georeferenced: Senaatintori falls on the square in each.
+  The switch opens a box with every map and photo by its year: a click takes the timeline there, and the buildings
+  and today's street names can be hidden to see the map alone.
 - **Aerial view.** The Aerial mode streams the city's photogrammetric mesh from its 2017 or 2024 aerial photos
   (`kartta.hel.fi/3d/mesh/Helsinki_2017/`, `Helsinki_2024/2/`, 3D Tiles) into the same scene with
   [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS); nothing is downloaded by the pipeline. The

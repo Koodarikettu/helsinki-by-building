@@ -78,7 +78,10 @@ const FI_UI = {
   'Wikidata records this building as their place of work.': 'Wikidatan mukaan henkilö työskenteli tässä.',
   'Wikidata records this building as their birthplace.': 'Wikidatan mukaan henkilö syntyi tässä.',
   'Wikidata records this building as the place where they died.': 'Wikidatan mukaan henkilö kuoli tässä.',
-  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva', 'Old maps': 'Vanhat kartat', 'Aerial photo': 'Ilmakuva', 'Map': 'Kartta',
+  'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial': 'Ilmakuva', 'Old maps': 'Vanhat kartat', 'Maps': 'Kartat', 'Aerial photos': 'Ilmakuvat',
+  'Pick a year, or drag the timeline: the map changes with it.': 'Valitse vuosi tai vedä aikajanaa: kartta vaihtuu sen mukana.',
+  'Hide the buildings': 'Piilota rakennukset', 'No earlier name known': 'Ei aiempaa nimeä tiedossa',
+  'Click a street to see its names and where they come from.': 'Napsauta katua: näet sen nimet ja mistä ne tulevat.',
   'Year of the aerial photos': 'Ilmakuvien vuosi',
   'buildings': 'rakennusta', 'Building the city': 'Kaupunkia rakennetaan',
   'Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.': 'Käännä vetämällä. Siirrä oikealla painikkeella tai Shift-vedolla. Zoomaa rullalla.',
@@ -476,7 +479,7 @@ function pick(x, y) {
   renderer.readRenderTargetPixels(pickTarget, 0, 0, 1, 1, pickPixel);
   renderer.setRenderTarget(null);
   renderer.setClearColor(SKY, 1);
-  flat.visible = labelGroup.visible = true;
+  showCity();
   ground.visible = groundShown;
   for (const m of meshes) m.material = m.userData.draw;
   camera.clearViewOffset();
@@ -541,10 +544,9 @@ async function loadPhoto() {
 async function setPhoto(on) {
   photoOn = on;
   document.body.classList.toggle('photo', on);
-  document.querySelector('.photo-mode').setAttribute('aria-pressed', on);
-  const m = uniforms.uMode.value === MODE.solar ? MODE.energy : uniforms.uMode.value;
-  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !on && +b.dataset.mode === m));
-  blocks.visible = flat.visible = labelGroup.visible = !on;
+  if (on && streetsOn) setStreets(false);
+  markTabs();
+  showCity();
   if (on) { if (playing) stopPlay(); pinCard(-1); }
   if (on || photoLoad) (await (photoLoad ??= loadPhoto())).group.visible = photoOn;
 }
@@ -635,7 +637,7 @@ function updateGround() {
   ground.visible = groundOn && !photoOn;
   if (!ground.visible) return;
   const src = groundAt(uniforms.uYear.value)?.[1] ?? null;
-  if (src !== groundSrc) { groundPrev = groundSrc; groundSrc = src; drawGroundCaption(); }
+  if (src !== groundSrc) { groundPrev = groundSrc; groundSrc = src; markGroundYear(); }
   for (const m of ground.children) m.visible = false;
   if (!src) return;
   frustum.setFromProjectionMatrix(projView.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
@@ -660,18 +662,47 @@ function updateGround() {
     }
   }
 }
-const groundBtn = document.getElementById('ground');
-function setGround(on) { groundOn = on; groundBtn.setAttribute('aria-pressed', on); drawGroundCaption(); }
+const groundBtn = document.getElementById('ground'), groundBox = document.getElementById('ground-box');
+let mapAlone = false;
+function setGround(on) {
+  groundOn = on;
+  groundBtn.setAttribute('aria-pressed', on);
+  groundBox.hidden = !on;
+  if (on) collapsePanelOnPhone();  // the legend's sheet would cover the years
+  showCity(); markGroundYear();
+}
 groundBtn.onclick = () => setGround(!groundOn);
-function drawGroundCaption() {
+// The city drawn over the ground: hidden in the aerial view, and under an old map when the map is to be seen alone.
+function showCity() {
+  flat.visible = !photoOn;
+  blocks.visible = labelGroup.visible = !photoOn && !(groundOn && mapAlone);
+}
+// Every map and photo by its year: a click takes the timeline there, and the one lying on the ground stays marked.
+function renderGroundBox() {
+  const split = GROUND.findIndex(([, src]) => src.startsWith('Orto'));
+  const chips = list => `<div class="ground-years">${list.map(([y]) => `<button data-year="${y}" aria-pressed="false">${y}</button>`).join('')}</div>`;
+  groundBox.innerHTML = `<p>${t('Pick a year, or drag the timeline: the map changes with it.')}</p>
+    <h3>${t('Maps')}</h3>${chips(GROUND.slice(0, split))}<h3>${t('Aerial photos')}</h3>${chips(GROUND.slice(split))}
+    <label><input type="checkbox"${mapAlone ? ' checked' : ''}> ${t('Hide the buildings')}</label>`;
+  groundBox.querySelectorAll('[data-year]').forEach(b => b.onclick = () => {
+    const y = +b.dataset.year;
+    stopPlay();
+    uniforms.uYear.value = y;
+    uniforms.uYearFrom.value = Math.min(uniforms.uYearFrom.value, y - 1);
+    drawHist();
+  });
+  groundBox.querySelector('input').onchange = e => { mapAlone = e.target.checked; if (mapAlone) pinCard(-1); showCity(); };
+  markGroundYear();
+}
+function markGroundYear() {
   const g = groundOn && groundAt(uniforms.uYear.value);
-  document.getElementById('ground-src').textContent = g ? `${t(g[1].startsWith('Orto') ? 'Aerial photo' : 'Map')} ${g[0]}` : '';
+  groundBox.querySelectorAll('[data-year]').forEach(b => b.setAttribute('aria-pressed', !!g && +b.dataset.year === g[0]));
 }
 
 // ---------- Street names, then and now ----------
-// The city's street areas on the ground, switched on with a button (pipeline/s07_labels.py, streetmap.*): blue where
-// the place-name register's history gives the street a former name. A view of its own: the buildings fade and take no
-// clicks, and a click on a street opens its names.
+// The city's street areas on the ground, a tab of their own (pipeline/s07_labels.py, streetmap.*): blue where the
+// place-name register's history gives the street a former name. The buildings fade, always in their periods, and take
+// no clicks; a click on a street opens its names.
 const STREET_COLORS = ['#3d7fd9', '#d3d0c6'];  // with a former name, without
 let streetMap = null, streetLoad = null, streetsOn = false, pinnedStreet = null;
 async function loadStreets() {
@@ -691,17 +722,30 @@ async function loadStreets() {
   flat.add(mesh, picked);
   return streetMap = { ...meta, polys, mesh, picked };
 }
-const streetsBtn = document.getElementById('streets');
+const streetsBtn = document.querySelector('.streets-mode');
 function setStreets(on) {
   streetsOn = on;
   uniforms.uPale.value = on ? 1 : 0;
   uniforms.uHover.value = -1;
-  streetsBtn.setAttribute('aria-pressed', on);
-  document.getElementById('streets-key').hidden = !on;
+  if (on) {
+    if (photoOn) setPhoto(false);
+    uniforms.uMode.value = MODE.period;
+    maskTarget = periods.map(() => 1);
+  }
+  markTabs();
   pinCard(-1);
-  if (on || streetLoad) (streetLoad ??= loadStreets()).then(s => { s.mesh.visible = streetsOn; });
+  renderPanel(); drawHist();
+  // the legend counts the streets once they have loaded
+  if (on || streetLoad) (streetLoad ??= loadStreets()).then(s => { s.mesh.visible = streetsOn; renderPanel(); });
 }
 streetsBtn.onclick = () => setStreets(!streetsOn);
+// One tab pressed: the street-name and aerial views stand over the colourings.
+function markTabs() {
+  const m = uniforms.uMode.value === MODE.solar ? MODE.energy : uniforms.uMode.value;
+  document.querySelectorAll('.modes button[data-mode]').forEach(b => b.setAttribute('aria-pressed', !photoOn && !streetsOn && +b.dataset.mode === m));
+  document.querySelector('.photo-mode').setAttribute('aria-pressed', photoOn);
+  streetsBtn.setAttribute('aria-pressed', streetsOn);
+}
 function pickStreet(x, y) {
   if (!streetsOn || photoOn || !streetMap) return null;
   ray.setFromCamera(new THREE.Vector2(x / canvas.clientWidth * 2 - 1, 1 - y / canvas.clientHeight * 2), camera);
@@ -1384,7 +1428,14 @@ const sectionIcon = sec => `<svg class="icon" viewBox="0 0 16 16" aria-hidden="t
 
 function renderPanel() {
   const mode = uniforms.uMode.value;
-  if (mode === MODE.period) {
+  const row = (color, label, n) => `<div><i style="background:${color}"></i><span>${label}</span><span class="n">${n == null ? '' : fmt(n)}</span></div>`;
+  if (streetsOn) {
+    const old = streetMap && new Set(streetMap.of.slice(0, streetMap.old)).size;
+    panel.innerHTML = `<h2>${t('Street names')}</h2><div class="energy-scale">${row(STREET_COLORS[0], t('Earlier name known'), old)}
+      ${row(STREET_COLORS[1], t('No earlier name known'), streetMap && streetMap.names.length - old)}</div>
+      <p class="note">${t('Click a street to see its names and where they come from.')}</p>
+      <a class="src" href="${NAMES_URL()}" target="_blank" rel="noopener">${t('Helsinki place names')}, CC BY 4.0</a>`;
+  } else if (mode === MODE.period) {
     panel.innerHTML = `<h2>${t('Built in')}</h2><div class="swatches">${periods.map((p, i) => `
       <button class="swatch" data-i="${i}" aria-pressed="${!!maskTarget[i]}">
         <i style="background:${p.color}"></i><span>${t(p.label)}</span><span class="n">${fmt(totals[i])}</span>
@@ -1404,7 +1455,6 @@ function renderPanel() {
   } else if (mode === MODE.energy || mode === MODE.solar) {
     const sub = `<div class="sub" role="group" aria-label="${t('Energy')}">${[MODE.energy, MODE.solar].map(m => `
       <button data-sub="${m}" aria-pressed="${m === mode}">${t(m === MODE.energy ? 'Energy label' : 'Solar potential')}</button>`).join('')}</div>`;
-    const row = (color, label, n) => `<div><i style="background:${color}"></i><span>${label}</span><span class="n">${fmt(n)}</span></div>`;
     if (mode === MODE.energy) {
       const e = config.energy;
       panel.innerHTML = `${sub}<div class="energy-scale">${e.labels.map((l, i) => row(ENERGY_COLORS[i + 1], l, e.counts[i + 1])).reverse().join('')}</div>
@@ -1499,8 +1549,9 @@ function setLayer(L) {
 
 document.querySelectorAll('.modes button[data-mode]').forEach(b => b.onclick = () => {
   if (photoOn) setPhoto(false);
+  if (streetsOn) setStreets(false);
   uniforms.uMode.value = +b.dataset.mode;
-  document.querySelectorAll('.modes button[data-mode]').forEach(x => x.setAttribute('aria-pressed', x === b));
+  markTabs();
   const bits = Array(MAX_GROUPS).fill(-1);
   if (activeLayer) activeLayer.groups.forEach((g, i) => { if (groupOn[g.bit] !== false) bits[i] = g.bit; });
   uniforms.uGroupBit.value = bits;
@@ -1658,9 +1709,8 @@ function applyStaticText() {
   document.querySelector('.photo-mode').textContent = t('Aerial');
   groundBtn.textContent = t('Old maps');
   streetsBtn.textContent = t('Street names');
-  document.querySelector('#streets-key span').textContent = t('Earlier name known');
   document.querySelector('.photo-years').setAttribute('aria-label', t('Year of the aerial photos'));
-  drawGroundCaption();
+  renderGroundBox();
   document.querySelector('.tally-count').childNodes[1].textContent = ' ' + t('buildings');
   document.querySelector('.howto').textContent = t('Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.');
   const ld = document.getElementById('loading'); if (ld.firstChild) ld.firstChild.textContent = t('Building the city') + ' ';

@@ -27,6 +27,7 @@
   <button data-mode="3" aria-pressed="false">Context layers</button>
   <button data-mode="1" aria-pressed="false">Floors</button>
   <button data-mode="2" aria-pressed="false">Energy</button>
+  <button class="streets-mode" aria-pressed="false">Street names</button>
   <button class="photo-mode" aria-pressed="false">Aerial</button>
   <button class="quests-open" aria-haspopup="dialog"><svg viewBox="0 0 24 8" aria-hidden="true"><path d="M1 1l6 6M7 1L1 7M9 1l6 6M15 1L9 7M17 1l6 6M23 1l-6 6"/></svg><span>Quests</span></button>
 </nav>
@@ -121,10 +122,8 @@
 </div>
 
 <div class="ground">
-  <button id="ground" aria-pressed="false">Old maps</button>
-  <span id="ground-src"></span>
-  <button id="streets" aria-pressed="false">Street names</button>
-  <span id="streets-key" hidden><i></i><span>Earlier name known</span></span>
+  <button id="ground" aria-pressed="false" aria-controls="ground-box">Old maps</button>
+  <div id="ground-box" class="ground-box" hidden></div>
 </div>
 <div class="photo-years" role="group" aria-label="Year of the aerial photos">
   <button data-year="2017" aria-pressed="false">2017</button><button data-year="2024" aria-pressed="true">2024</button>
