@@ -1,5 +1,7 @@
 # Helsinki, building by building
 
+**[koodarikettu.github.io/helsinki-by-building](https://koodarikettu.github.io/helsinki-by-building/)**
+
 Every building in Helsinki, 85,000 of them, coloured by the year it was completed. What the map shows:
 
 - **Colourings.** By the period a building was completed, by its floors, by its energy label, by how much solar
@@ -101,6 +103,8 @@ python3 -m http.server 8642 --directory web
 ```
 
 Raw downloads (`data/`) and generated output (`web/data/`) are not in the repository: they are rebuilt by the pipeline.
+The site is `web/` with its generated data, less `web/data/tiles/` (the packs carry the tiles), on the `gh-pages`
+branch, which GitHub Pages serves at the address above.
 The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 (EPSG:3879), x east, z south.
 
 ## Data decisions
