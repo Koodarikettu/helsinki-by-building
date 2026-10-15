@@ -33,21 +33,35 @@ three.js city, follows theirs. The viewer in `web/` is Amsterdam's, with Helsink
 
 ![Helsinki's buildings coloured by the period they were completed, seen from the sea](docs/screenshots/city.jpg)
 
+| Floors, in seven steps | War: the land front of 1914–1918 | War: bomb damage of 1944 |
+|---|---|---|
+| ![The city centre coloured by floors, from yellow (one) to navy (13 and more)](docs/screenshots/floors.jpg) | ![Strongpoint IV's trenches, coloured by what the 1996 survey found of them, and its structures as dots](docs/screenshots/landfront.jpg) | ![Unioninkatu 30 bombed in 1944, the Cathedral behind, in the City Museum's photo](docs/screenshots/bombing.jpg) |
+
+| Other: the tram network of 1952 | Other: the Heritage Agency's photos of Senate Square | Other: public art |
+|---|---|---|
+| ![The tram tracks in use in 1952 over the city of that year](docs/screenshots/trams.jpg) | ![Senate Square's card with a photo of 1900 and a button for each decade of its 1,722 photos](docs/screenshots/mvphotos.jpg) | ![Havis Amanda's card among the city's public art, coloured by period](docs/screenshots/art.jpg) |
+
+| Map: the master plan proposal of 1960 | Map: road traffic noise in 2022 | Map: the city of 1909 |
+|---|---|---|
+| ![The master plan proposal of 1960 under today's buildings](docs/screenshots/plan.jpg) | ![The 2022 survey's road traffic noise by day, the buildings hidden](docs/screenshots/noise.jpg) | ![The buildings standing in 1909 on the city map of 1909](docs/screenshots/oldmap.jpg) |
+
 | The building's card: archive photos through the years | Context layer: protected in the local plan | Quests: find the building from an old photo |
 |---|---|---|
 | ![The Government Palace card with C.A. Hårdh's photo from 1866](docs/screenshots/archive.jpg) | ![Buildings protected in local plans, by marking](docs/screenshots/protected.jpg) | ![A solved quest step: Kaivohuone in 1870 and today](docs/screenshots/quest.jpg) |
 
-| Aerial view: the city's 3D model from its 2024 aerial photos | Back to 2017: Pasila on that year's aerial photo, Tripla still a building site | Street names: the former names of Pohjoisesplanadi |
+| Aerial 3D: the city's model from its 2024 aerial photos | Back to 2017: Pasila on that year's aerial photo, Tripla still a building site | Street names: the former names of Pohjoisesplanadi |
 |---|---|---|
 | ![The Market Square and the Cathedral in the 2024 photogrammetric mesh](docs/screenshots/aerial.jpg) | ![Pasila in 2017 on the aerial photo of that year: Tripla's site still a pit, and the buildings demolished since standing pale](docs/screenshots/demolished.jpg) | ![The Street names view: streets with a former name in blue, Pohjoisesplanadi's card](docs/screenshots/streets.jpg) |
 
-| Energy labels | Solar potential of the roofs | Old maps: the city of 1909 |
-|---|---|---|
-| ![Buildings coloured by their energy label](docs/screenshots/energy.jpg) | ![Buildings coloured by the solar power their roofs could give](docs/screenshots/solar.jpg) | ![The buildings standing in 1909 on the city map of 1909](docs/screenshots/oldmap.jpg) |
+| Energy labels | Solar potential of the roofs |
+|---|---|
+| ![Buildings coloured by their energy label](docs/screenshots/energy.jpg) | ![Buildings coloured by the solar power their roofs could give](docs/screenshots/solar.jpg) |
 
 Screenshots of the map, which uses CC BY 4.0 data © City of Helsinki (buildings, the 3D model and its aerial meshes,
-aerial photos, old maps, street areas and place names) and © HSY (solar potential), and the public energy
-certificates of Varke's register. They show photos by C.A. Hårdh (Helsinki City Museum, public domain) and, in the
+aerial photos, old maps, master plans, noise surveys, the land front's survey, street areas and place names) and © HSY
+(solar potential), the public energy certificates of Varke's register, OpenHistoricalMap's tram tracks (CC0) and the
+Helsinki Art Museum's text on Havis Amanda (CC BY 4.0). They show photos by C.A. Hårdh and Jukka Kuusisto (Helsinki
+City Museum, public domain), by Atelier Aino (Finnish Heritage Agency, Historian kuvakokoelma, CC BY 4.0) and, in the
 quest, Kaivohuone today by
 [Marit Henriksson](https://commons.wikimedia.org/wiki/File:Kaivohuone_A_-Marit_Henriksson.jpg) (CC BY-SA 4.0).
 
