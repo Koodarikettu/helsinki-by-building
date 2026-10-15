@@ -106,8 +106,9 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   forms that differ from today's name only by spaces or capitals (Freds Gatan for Fredsgatan); Hämeentie was corrected
   by hand, since its history begins with the old Tavastgatan on today's Snellmaninkatu. `s07_labels` keeps a name only
   while it stands word for word in its street's text, so a name read wrong cannot be one the text does not contain.
-  The Street names view lays the 7,270 street areas on the ground, the 488 streets with a former name in blue; a click
-  on a street opens its names, its reason and the full history they were read from.
+  The Street names view lays the 7,270 street areas on the ground, the 488 streets with a former name in blue, and
+  fades the buildings, which then take no clicks; a click on a street opens its names, its reason and the full history
+  they were read from.
 - **Energy labels.** Varke's energy certificate register publishes every certificate in force as one CSV
   (146,383 in Finland); those of houses with one or two homes are not public. Matched by VTJ-PRT: 14,987 buildings,
   the one signed last where a building has several. The register offers the file for anyone to download but states no

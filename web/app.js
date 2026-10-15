@@ -278,6 +278,7 @@ const uniforms = {
   uHover: { value: -1 },
   uSelected: { value: -1 },
   uBlind: { value: 0 },
+  uPale: { value: 0 },                             // the street-name view: buildings fade and take no clicks
   uFogColor: { value: col(SKY) },
   uFog: { value: new THREE.Vector2(9000, 26000) },
 };
@@ -285,7 +286,7 @@ const uniforms = {
 const VERT = /* glsl */`
   in float bld;
   uniform sampler2D uAttr;
-  uniform float uYear, uYearFrom, uMode, uHover, uSelected, uBlind, uNow, uBorn, uPlaying, uRise, uLayerAt;
+  uniform float uYear, uYearFrom, uMode, uHover, uSelected, uBlind, uPale, uNow, uBorn, uPlaying, uRise, uLayerAt;
   uniform vec3 uPalette[${periods.length}];
   uniform float uMask[${periods.length}];
   uniform int uGroupBit[${MAX_GROUPS}];
@@ -367,6 +368,7 @@ const VERT = /* glsl */`
     // A quest's question about one building turns it red; a year riddle also hides every other age.
     if (uBlind > 0.5 && vGid == uSelected) c = vec3(0.925, 0.0, 0.0);
     else if (uBlind > 0.5 && uBlind < 1.5) c = uMaquette;
+    if (uPale > 0.5) c = mix(c, uMaquette, 0.8);
     if (vGid == uHover || (vGid == uSelected && uBlind < 0.5)) c = mix(c, vec3(0.0), 0.35);
     vColor = c;
     vec4 w = modelMatrix * vec4(p, 1.0);
@@ -668,8 +670,8 @@ function drawGroundCaption() {
 
 // ---------- Street names, then and now ----------
 // The city's street areas on the ground, switched on with a button (pipeline/s07_labels.py, streetmap.*): blue where
-// the place-name register's history gives the street a former name. A click on a street opens its names; a click that
-// lands on a building still opens the building.
+// the place-name register's history gives the street a former name. A view of its own: the buildings fade and take no
+// clicks, and a click on a street opens its names.
 const STREET_COLORS = ['#3d7fd9', '#d3d0c6'];  // with a former name, without
 let streetMap = null, streetLoad = null, streetsOn = false, pinnedStreet = null;
 async function loadStreets() {
@@ -692,14 +694,16 @@ async function loadStreets() {
 const streetsBtn = document.getElementById('streets');
 function setStreets(on) {
   streetsOn = on;
+  uniforms.uPale.value = on ? 1 : 0;
+  uniforms.uHover.value = -1;
   streetsBtn.setAttribute('aria-pressed', on);
   document.getElementById('streets-key').hidden = !on;
-  if (!on && pinnedStreet) pinCard(-1);
+  pinCard(-1);
   if (on || streetLoad) (streetLoad ??= loadStreets()).then(s => { s.mesh.visible = streetsOn; });
 }
 streetsBtn.onclick = () => setStreets(!streetsOn);
 function pickStreet(x, y) {
-  if (!streetsOn || !streetMap) return null;
+  if (!streetsOn || photoOn || !streetMap) return null;
   ray.setFromCamera(new THREE.Vector2(x / canvas.clientWidth * 2 - 1, 1 - y / canvas.clientHeight * 2), camera);
   const hit = ray.intersectObject(streetMap.mesh, false)[0];
   if (!hit) return null;
@@ -1033,11 +1037,13 @@ canvas.addEventListener('pointerdown', e => {
 canvas.addEventListener('pointerup', e => {
   dragging = false;
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
+  if (streetsOn && !photoOn) {
+    const street = pickStreet(e.clientX, e.clientY);
+    return street && street !== pinnedStreet ? pinStreet(street, e.clientX, e.clientY) : pinCard(-1);
+  }
   const gid = photoOn ? pickPhoto(e.clientX, e.clientY) : pick(e.clientX, e.clientY);
   if (quest && !solved && qStep().kind === 'find') { questClick(gid); return; }
   if (cardsLocked()) return;
-  const street = gid < 0 && pickStreet(e.clientX, e.clientY);
-  if (street) return street === pinnedStreet ? pinCard(-1) : pinStreet(street, e.clientX, e.clientY);
   pinCard(gid === pinnedGid ? -1 : gid, e.clientX, e.clientY);
 });
 canvas.addEventListener('pointerleave', () => { pointer = null; if (pinnedGid < 0 && !pinnedStreet) card.hidden = true; uniforms.uHover.value = -1; });
@@ -1143,6 +1149,7 @@ function startQuest(q, n, sc = 0, mk = []) {
   document.body.classList.add('questing');
   setPhoto(false);
   setGround(false);  // an old photo would give the year away
+  setStreets(false);  // a quest is about buildings
   pinCard(-1);
   enterStep(true);
 }
@@ -1703,7 +1710,7 @@ renderer.setAnimationLoop(now => {
   }
   // ponytail: a ray into the aerial mesh costs ~15 ms close up (450k triangles), so it hovers at 5 Hz; a BVH
   // (three-mesh-bvh) would let it keep pace with the blocks' GPU pick
-  if (pointer && !dragging && frame % (photoOn ? 12 : 3) === 0) {
+  if (pointer && !dragging && !(streetsOn && !photoOn) && frame % (photoOn ? 12 : 3) === 0) {
     const gid = photoOn ? pickPhoto(pointer[0], pointer[1]) : pick(pointer[0], pointer[1]);
     uniforms.uHover.value = gid;
     showCard(gid, pointer[0], pointer[1]);
