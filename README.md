@@ -270,15 +270,16 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   control's own address in Pasila; the years before carry no such mark, and that address has 8–104 fines a year).
   Checked by counting again from the raw files with another reader (pandas): all 33,150 street-years agree, and each
   file's rows are its lines.
-  A street is coloured by its fines in the timeline's year in seven steps (1, 10, 25, 50, 100, 250 and 500+), the more
-  the redder, as noise maps go from quiet to loud: one hue from salmon to a deep red, each step clearly darker, the
-  lightest clearing the land at 2:1 (dataviz validator, ordinal); a street with none is a pale grey. In this view the
+  A street is coloured by its fines in the timeline's year in eight steps (1, 5, 10, 25, 50, 100, 250 and 500+), in
+  the noise surveys' own eight colours from 40 dB to 75+, light green through yellow and orange to red and violet, so
+  that the two maps read alike and each step stands apart from the next (a one-hue red ramp tried first was too even
+  to tell the steps apart); a street with none is a pale grey, and a picked street is blue. In this view the
   timeline holds to 2014–2023, a bar a year as tall as its fines, and the tally counts them; the buildings can be
   hidden. A card gives a street's fines year by year and the year's three commonest main reasons, in Finnish, codes
   cut off; the reasons are the register's own words, and a few are qualifiers rather than reasons ("Ei koske
   kuormaavia …").
-  A long street gathers more fines than a short one, so the view also colours them per 100 m, in steps of under 2, 2,
-  5, 10, 25, 50 and 100+. A street's length is the sum of its built street areas' own lengths (`pituus`), or an area's
+  A long street gathers more fines than a short one, so the view also colours them per 100 m, in steps of under 1, 1,
+  2, 5, 10, 25, 50 and 100+. A street's length is the sum of its built street areas' own lengths (`pituus`), or an area's
   size over its mean width where it gives none. Cycle and foot ways and parking areas (1,954 areas) run beside the
   carriageway rather than along it, and count only for a street that is nothing else: added in, Eteläinen
   Rautatiekatu would run 1,960 m rather than 636. Mannerheimintie comes to 6.0 km, Fredrikinkatu 1.5 km,

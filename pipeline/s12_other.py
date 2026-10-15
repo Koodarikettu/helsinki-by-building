@@ -55,10 +55,10 @@ OHM = dict(label="OpenHistoricalMap, Helsinki's tram tracks", label_fi="OpenHist
 FINES = dict(label="City of Helsinki, parking violations", label_fi="Helsingin kaupunki, pysäköintivirheet",
              url="https://hri.fi/data/en_GB/dataset/pysakointivirheet-helsingissa",
              url_fi="https://hri.fi/data/fi/dataset/pysakointivirheet-helsingissa", licence="CC BY 4.0")
-# Fines on a street in a year, from this many up, and fines per 100 metres of street: the colouring's steps (its
-# colours are web/app.js FINE_COLORS).
-FINE_STEPS = [1, 10, 25, 50, 100, 250, 500]
-FINE_DENSE = [0, 2, 5, 10, 25, 50, 100]
+# Fines on a street in a year, from this many up, and fines per 100 metres of street: the colouring's eight steps, one
+# for each of the noise surveys' colours (web/app.js FINE_COLORS).
+FINE_STEPS = [1, 5, 10, 25, 50, 100, 250, 500]
+FINE_DENSE = [0, 1, 2, 5, 10, 25, 50, 100]
 
 
 def art() -> dict:
@@ -320,13 +320,13 @@ def fines() -> dict:
         id="fines", menu="other", label="Parking fines", label_fi="Pysäköintivirheet", years=span, years_fi=span,
         streets="fines.json", steps=FINE_STEPS, dense=FINE_DENSE, span=[years[0], years[-1]],
         text=(f"The parking fines and notices the city's parking inspectors and the police wrote in {span}, on the street of "
-              "the address each was written to. A street is coloured by its fines in the year shown, the more the redder, "
-              "by all its fines or by its fines per 100 metres, so that a short street fined often stands out beside a "
+              "the address each was written to. A street is coloured by its fines in the year shown, in the colours of "
+              "the city's noise maps, from green through yellow to red and violet, by all its fines or by its fines per 100 metres, so that a short street fined often stands out beside a "
               "long one; pick a year on the timeline. A click on a street gives its fines year by year and the year's "
               "commonest reasons."),
         text_fi=(f"Pysäköinninvalvonnan ja poliisin vuosina {span} kirjoittamat pysäköintivirhemaksut ja huomautukset sen "
-                 "kadun mukaan, jonka osoitteeseen maksu kirjattiin. Katu on värjätty näytetyn vuoden maksujen mukaan, "
-                 "sitä punaisempi mitä enemmän maksuja, joko kaikkien maksujen tai 100 metriä kohden laskettujen mukaan, "
+                 "kadun mukaan, jonka osoitteeseen maksu kirjattiin. Katu on värjätty näytetyn vuoden maksujen mukaan "
+                 "kaupungin melukarttojen värein vihreästä keltaisen kautta punaiseen ja violettiin, joko kaikkien maksujen tai 100 metriä kohden laskettujen mukaan, "
                  "jolloin lyhyt usein sakotettu katu erottuu pitkän rinnalla; valitse vuosi aikajanalta. Katua "
                  "napsauttamalla näet sen maksut vuosittain ja vuoden yleisimmät syyt."),
         caveat=(f"{left} % of a year's fines have no address, or one on a street that is not among the city's street areas "

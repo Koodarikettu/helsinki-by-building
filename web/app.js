@@ -964,11 +964,11 @@ async function buildEra(E) {
   if (E.streets) E.kinds[0].obj.add(await fineStreets(E));
 }
 // The parking fines lie on the street areas of the street-name view (pipeline/s12_other.py, fines.json, loaded when
-// the view first opens): each street coloured by its fines in the timeline's year, in the steps of E.steps (or E.dense,
-// per 100 m), the more the redder, as noise maps go from quiet to loud; a street with none is a pale grey. The ramp is
-// one hue, light to dark, each step clearly darker, and its lightest clears the land at 2:1 (dataviz validator,
-// ordinal). A click opens its card; the timeline holds to the years there are, and the buildings can be hidden.
-const FINE_COLORS = ['#f0957a', '#eb7656', '#e05838', '#cf3d28', '#b2261e', '#8a1418', '#5c0710'];
+// the view first opens): each street coloured by its fines in the timeline's year, in the eight steps of E.steps (or
+// E.dense, per 100 m), in the noise surveys' own eight colours from 40 dB to 75+, so that the two read alike and each
+// step stands apart from the next; a street with none is a pale grey. A click opens its card; the timeline holds to
+// the years there are, and the buildings can be hidden.
+const FINE_COLORS = NOISE_COLORS.slice(0, 8);
 const FINE_NONE = '#dedbd3';
 async function fineStreets(E) {
   const [s, d] = await Promise.all([streetLoad ??= loadStreets(), fetch(`data/${E.streets}`).then(r => r.json())]);
@@ -1042,7 +1042,7 @@ function fineLegend(E, row) {
 }
 function pinFine(E, name, x, y) {
   pinSite(fineSite(E, name), x, y);
-  markStreet(name, '#ec0000');
+  markStreet(name, '#163a7a');  // blue: no step of the colouring
 }
 function streetCentre(name) {
   const k = streetMap.names.indexOf(name), idx = streetMap.mesh.geometry.index.array, pos = streetMap.mesh.geometry.attributes.position;
@@ -2151,7 +2151,7 @@ function drawFineYears(E, w, h) {
   for (let y = a; y <= b; y++) {
     const x0 = xOf(y) + 2, x1 = xOf(y + 1) - 2, bh = d ? d.totals[y - a] / max * (plotH - 6) : 0;
     hctx.globalAlpha = y === Y ? 1 : 0.3;
-    hctx.fillStyle = FINE_COLORS[4];
+    hctx.fillStyle = FINE_COLORS[6];
     hctx.fillRect(x0, plotH - bh, x1 - x0, bh);
     hctx.globalAlpha = 1;
     hctx.fillStyle = y === Y ? '#000' : '#5d6266';
@@ -2295,4 +2295,4 @@ renderer.setAnimationLoop(now => {
 });
 
 
-window.__dbg = { renderer, pick, pickPhoto, setPhoto, get photo() { return photo; }, pickStreet, setStreets, get streetMap() { return streetMap; }, uniforms, camera, controls, setLayer, layers, pinCard, showCard, building, labelGroup, labels, flyTo, startPlay, gidOf, questClick, startQuest, get quests() { return quests; } };
+window.__dbg = { eras: ERAS, renderer, pick, pickPhoto, setPhoto, get photo() { return photo; }, pickStreet, setStreets, get streetMap() { return streetMap; }, uniforms, camera, controls, setLayer, layers, pinCard, showCard, building, labelGroup, labels, flyTo, startPlay, gidOf, questClick, startQuest, get quests() { return quests; } };
