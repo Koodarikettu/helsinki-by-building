@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>Helsinki, rakennus rakennukselta</title>
+<meta name="description" content="Helsingin kaikki 85 000 rakennusta 3D-kartalla valmistumisvuoden mukaan: puretut rakennukset, vanhat kartat ja ilmakuvat, yleiskaavat, melu, lämmitys, maailmansodat, kadunnimien historia, kuka asui missäkin ja pysäköintivirheet. Every building in Helsinki by the year it was completed.">
+<link rel="canonical" href="https://koodarikettu.github.io/helsinki-by-building/">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<canvas id="scene" aria-label="3D map of Helsinki's buildings"></canvas>
+<div class="veil veil-top" aria-hidden="true"></div>
+<div class="veil veil-bottom" aria-hidden="true"></div>
+
+<header class="masthead">
+  <div>
+    <h1>Helsinki</h1>
+    <p class="dek">Every building standing today, by the year it was completed.</p>
+  </div>
+</header>
+
+<nav class="modes" aria-label="Colour the city by">
+  <button data-mode="0" aria-pressed="true">Period</button>
+  <button data-mode="3" aria-pressed="false">Context layers</button>
+  <button data-mode="1" aria-pressed="false">Floors</button>
+  <button data-mode="2" aria-pressed="false">Energy</button>
+  <button class="streets-mode" aria-pressed="false">Street names</button>
+  <details class="pick war-pick"><summary>War</summary><div class="menu"></div></details>
+  <details class="pick other-pick"><summary>Other</summary><div class="menu"></div></details>
+  <details class="pick map-pick"><summary>Map</summary><div class="menu"></div></details>
+</nav>
+
+<div class="lang" role="group" aria-label="Language">
+  <button class="quests-open" aria-haspopup="dialog"><svg viewBox="0 0 24 8" aria-hidden="true"><path d="M1 1l6 6M7 1L1 7M9 1l6 6M15 1L9 7M17 1l6 6M23 1l-6 6"/></svg><span>Quests</span></button>
+  <button class="about-open" aria-haspopup="dialog">About</button>
+  <button data-lang="fi" aria-pressed="true">FI</button><button data-lang="en" aria-pressed="false">EN</button>
+</div>
+
+<dialog id="about" class="about" aria-labelledby="about-title">
+  <button class="about-close" aria-label="Close">×</button>
+  <article lang="en" data-lang-block="en" hidden>
+    <h2 id="about-title">About this map</h2>
+    <p>All 85,000 buildings in Helsinki, coloured by the year they were completed, with the protection the city's plans give them, the national heritage areas they stand in and what Wikipedia says about them. Go back in time and the 4,800 buildings torn down since 2008 stand again, paler; the Torn down view, under Period, shows them all at once in the colour of their age. Under the buildings can lie the city's old maps and aerial photos, the master plans that show what Helsinki was meant to become, and its road traffic noise. The War view shows each world war on its own: for the first, the land front Russia built around the city and the damage of the capture of Helsinki in 1918; for the second, the anti-aircraft batteries and the bomb damage; for both, the defences in the national register and the memorials. The Energy colouring shows energy labels, how much solar power a roof could give and the heat source the building register records, and a building's card tells why its street is so named and who lived there. Aerial 3D, in the Map menu, shows the city's 3D model made from its 2017 or 2024 aerial photos. Street names lays the streets on the ground and fades the buildings: streets that had an earlier name are blue, and a click on a street gives its names. The Other menu shows the city's public art, the tram network through time, the Finnish Heritage Agency's photos at the places they name and the parking fines of 2014–2023, street by street. Under Context layers, Who lived here finds the homes of well-known people by their Finnish Wikipedia articles, and the War view shows the Defence Forces' own photos of the city at war.</p>
+    <p class="notice">A non-commercial project, made out of curiosity and for education.</p>
+    <h3>Data</h3>
+    <p>Downloaded on 14 October 2026.</p>
+    <ul>
+      <li>Buildings, completion years, floors, use, materials and heat sources: City of Helsinki, buildings with register data
+        (<a href="https://hri.fi/data/en_GB/dataset/helsingin-rakennukset" target="_blank" rel="noopener">Helsinki Region Infoshare</a>,
+        WFS layer Rakennukset_alue_rekisteritiedot). CC BY 4.0.</li>
+      <li>Land and water: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-maa-ja-vesialueet" target="_blank" rel="noopener">land and water areas</a>. CC BY 4.0.</li>
+      <li>Protected buildings: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa" target="_blank" rel="noopener">buildings and areas protected in local plans</a>. CC BY 4.0.</li>
+      <li>Street names: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-yleisten-alueiden-rekisteri" target="_blank" rel="noopener">register of public areas</a>, maintained by the Urban Environment Division. CC BY 4.0.</li>
+      <li>Heights: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D city model</a>. CC BY 4.0.</li>
+      <li>Demolished buildings: City of Helsinki, the <a href="https://hri.fi/data/en_GB/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D city model</a>'s buildings demolished since 2008, with their years of construction and demolition. CC BY 4.0.</li>
+      <li>Aerial view: City of Helsinki, the <a href="https://hri.fi/data/en_GB/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D city model</a>'s photogrammetric meshes from 2017 and 2024 aerial photos, streamed from the city's server. CC BY 4.0.</li>
+      <li>Map layers: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-ortoilmakuvat" target="_blank" rel="noopener">orthophotos</a> from 1932 to 2025, <a href="https://hri.fi/data/en_GB/collection/helsingin-historialliset-kartat" target="_blank" rel="noopener">historical maps</a> from 1749 to 1962, guide maps from 1965 to today and the inner city's bird's-eye map of 2014, the master plans and their proposals from 1923 to 2016, and the <a href="https://hri.fi/data/en_GB/dataset/helsingin-kaupungin-meluselvitys-2017" target="_blank" rel="noopener">noise surveys</a> of 2012, 2017 and 2022, streamed from the open layers of the city's map server. CC BY 4.0.</li>
+      <li>Energy labels: Varke, the public certificates of the <a href="https://www.energiatodistusrekisteri.fi/" target="_blank" rel="noopener">energy certificate register</a>, matched by building ID. Certificates of houses with one or two homes are not public.</li>
+      <li>Solar potential: HSY, <a href="https://hri.fi/data/en_GB/dataset/paakaupunkiseudun-aurinkosahkopotentiaali" target="_blank" rel="noopener">photovoltaic potential in the Helsinki metropolitan area</a> (2015). CC BY 4.0.</li>
+      <li>Why streets are so named: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-nimisto" target="_blank" rel="noopener">street names of the City of Helsinki</a>, in Finnish. CC BY 4.0. The register keeps no earlier names of its own: those shown were read out of its histories of the names by a language model, which kept only names the street itself carried, not a street joined to it or one it was part of, nor a proposal; each stands word for word in its street's history.</li>
+      <li>Data and maps © City of Helsinki, City Survey Services. Use classes: Statistics Finland, Building classification 1994.</li>
+      <li>Nationally significant built environments: Finnish Heritage Agency, <a href="https://www.rky.fi" target="_blank" rel="noopener">RKY</a>. CC BY 4.0.</li>
+      <li>The land front of 1914–1918: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/helsingin-ensimmaisen-maailmansodan-aikaiset-maalinnoitukset" target="_blank" rel="noopener">First World War fortifications</a>, surveyed in 1996. CC BY 4.0.</li>
+      <li>Defences of the two wars: Finnish Heritage Agency, register of ancient and historic remains, dated by the register's own pages. CC BY 4.0.</li>
+      <li>Air-defence positions of 1939–1944 beyond the register: gathered from the history of the anti-aircraft regiment (Ahti Lappi), the Ilmatorjuntamuseo, Wikipedia and local papers; each card names its source.</li>
+      <li>War damage: Helsinki City Museum's photos of 1918 and 1939–1944 in Finna, placed at the address the museum gives. Public domain (PDM).</li>
+      <li>Tram tracks: <a href="https://www.openhistoricalmap.org/" target="_blank" rel="noopener">OpenHistoricalMap</a>, CC0.</li>
+      <li>Parking fines: City of Helsinki, <a href="https://hri.fi/data/en_GB/dataset/pysakointivirheet-helsingissa" target="_blank" rel="noopener">parking violations</a> of 2014–2023, by the street of their address. CC BY 4.0.</li>
+      <li>The city at war: SA-kuva, the Military Museum's photo archive, in <a href="https://www.finna.fi" target="_blank" rel="noopener">Finna</a>, placed by the place each photo's title names. CC BY 4.0.</li>
+      <li>Who lived here: <a href="https://fi.wikipedia.org" target="_blank" rel="noopener">Finnish Wikipedia</a>, the sentence of each article that names the address, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>, linked to the article; and Wikidata, CC0. Found automatically; house numbers may have changed since.</li>
+      <li>Heritage Agency photos: Finnish Heritage Agency collections in <a href="https://www.finna.fi" target="_blank" rel="noopener">Finna</a>, CC BY 4.0; each photo names its photographer and collection.</li>
+      <li>War memorials and public art: HAM Helsinki Art Museum's public art through the city's <a href="https://hri.fi/data/en_GB/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta" target="_blank" rel="noopener">Service Map</a>, picked by hand. Texts CC BY 4.0; the photos are not openly licensed and are not shown.</li>
+      <li>Names, architects, styles: Wikidata, CC0. Article extracts: Wikipedia, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>, shortened and linked to the article. Photos: Wikimedia Commons; each photo credits its author and licence.</li>
+      <li>Archive photos: <a href="https://www.finna.fi" target="_blank" rel="noopener">Helsinki City Museum, via Finna</a>, matched to buildings by the address the museum gives. Public domain (PDM) or CC BY 4.0; each photo names its photographer, links its record and loads from Finna.</li>
+    </ul>
+    <h3>Method</h3>
+    <p>About 35,000 buildings, nearly all sheds, storehouses, garages and summer cottages, have no year in the register;
+    a few carry the placeholder 1000. Their year is estimated from the other buildings on the same property, or else
+    from the nearest dated buildings. Before 1930 the register rounds many dates to the decade (1900 appears five times
+    as often as the years around it); the surplus is spread across the decade. Approximate years are paler and marked “c.”.
+    Heights come from the city's 3D city model: the 70th percentile of each building's roof surfaces, so that a tower
+    or a dome does not raise the whole block. Buildings the model does not link, nearly all small outbuildings, are
+    drawn at their number of floors times 3.2 m. Every claim in the quests is checked against its Wikipedia article.</p>
+  </article>
+  <article lang="fi" data-lang-block="fi">
+    <h2>Tietoa kartasta</h2>
+    <p>Helsingin kaikki 85 000 rakennusta värjättynä valmistumisvuoden mukaan. Mukana on myös asemakaavan suojelu, valtakunnallisesti merkittävät kulttuuriympäristöt ja se, mitä Wikipedia rakennuksista kertoo. Kun aikaa kelaa taaksepäin, vuoden 2008 jälkeen puretut 4 800 rakennusta palaavat haaleampina paikoilleen; Aikakausi-välilehden Puretut-näkymä näyttää ne kaikki kerralla rakennusaikansa värein. Rakennusten alle voi tuoda kaupungin vanhat kartat ja ilmakuvat, yleiskaavat, jotka näyttävät millainen Helsingistä piti tulla, sekä tieliikenteen melun. Sota-näkymä näyttää kummankin maailmansodan erikseen: ensimmäisestä Venäjän kaupungin ympärille rakentaman maalinnoituksen ja Helsingin valtauksen tuhot 1918, toisesta ilmatorjuntapatterit ja pommitusten tuhot, kummastakin muinaisjäännösrekisterin varustukset ja muistomerkit. Energia-väritys näyttää energialuokat, sen, paljonko aurinkosähköä katolta saisi, ja rakennusrekisteriin kirjatun lämmönlähteen. Rakennuksen kortti kertoo, mistä sen kadun nimi tulee ja kuka talossa asui. Kartta-valikon Ilmakuva 3D näyttää kaupungin vuosien 2017 ja 2024 ilmakuvista tehdyn 3D-mallin. Kadunnimet-näkymä piirtää kadut maahan ja haalistaa rakennukset: kadut, joilla on ollut aiempi nimi, ovat sinisiä, ja katua napsauttamalla näkee sen nimet. Muut-valikko näyttää kaupungin julkiset taideteokset, raitiotieverkon ajan mukana, Museoviraston kuvat paikoissa, jotka ne nimeävät, sekä pysäköintivirheet kaduittain vuosilta 2014–2023. Kontekstitasojen Kuka asui täällä -taso löytää tunnettujen henkilöiden kodit heidän suomenkielisistä Wikipedia-artikkeleistaan, ja Sota-näkymä näyttää puolustusvoimien omat kuvat sodan ajan kaupungista.</p>
+    <p class="notice">Ei-kaupallinen projekti, tehty uteliaisuudesta ja opetuskäyttöön.</p>
+    <h3>Aineistot</h3>
+    <p>Ladattu 14.10.2026.</p>
+    <ul>
+      <li>Rakennukset, valmistumisvuodet, kerrosluvut, käyttötarkoitukset, materiaalit ja lämmönlähteet: Helsingin kaupunki, rakennukset alueina rekisteritiedoin
+        (<a href="https://hri.fi/data/fi/dataset/helsingin-rakennukset" target="_blank" rel="noopener">Helsinki Region Infoshare</a>,
+        WFS-taso Rakennukset_alue_rekisteritiedot). CC BY 4.0.</li>
+      <li>Maa- ja vesialueet: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-maa-ja-vesialueet" target="_blank" rel="noopener">Helsingin maa- ja vesialueet</a>. CC BY 4.0.</li>
+      <li>Suojellut rakennukset: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa" target="_blank" rel="noopener">asemakaavoilla suojellut rakennukset ja alueet</a>. CC BY 4.0.</li>
+      <li>Kadunnimet: <a href="https://hri.fi/data/fi/dataset/helsingin-kaupungin-yleisten-alueiden-rekisteri" target="_blank" rel="noopener">Helsingin kaupungin yleisten alueiden rekisteri</a>. Aineiston ylläpitäjä on Helsingin kaupungin kaupunkiympäristön toimiala. CC BY 4.0.</li>
+      <li>Korkeudet: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D-kaupunkimalli</a>. CC BY 4.0.</li>
+      <li>Puretut rakennukset: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D-kaupunkimallin</a> vuoden 2008 jälkeen puretut rakennukset rakennus- ja purkuvuosineen. CC BY 4.0.</li>
+      <li>Ilmakuvanäkymä: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-3d-kaupunkimalli" target="_blank" rel="noopener">3D-kaupunkimallin</a> kolmioverkkomallit vuosien 2017 ja 2024 ilmakuvista, ladataan kaupungin palvelimelta. CC BY 4.0.</li>
+      <li>Karttatasot: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-ortoilmakuvat" target="_blank" rel="noopener">ortoilmakuvat</a> vuosilta 1932–2025, <a href="https://hri.fi/data/fi/collection/helsingin-historialliset-kartat" target="_blank" rel="noopener">historialliset kartat</a> vuosilta 1749–1962, opaskartat vuodesta 1965 tähän päivään ja kantakaupungin kuvakartta vuodelta 2014, yleiskaavat ja niiden ehdotukset vuosilta 1923–2016 sekä vuosien 2012, 2017 ja 2022 <a href="https://hri.fi/data/fi/dataset/helsingin-kaupungin-meluselvitys-2017" target="_blank" rel="noopener">meluselvitykset</a>, ladataan kaupungin karttapalvelimen avoimista tasoista. CC BY 4.0.</li>
+      <li>Energialuokat: Varke, <a href="https://www.energiatodistusrekisteri.fi/" target="_blank" rel="noopener">energiatodistusrekisterin</a> julkiset todistukset, liitetty rakennuksiin pysyvällä rakennustunnuksella. Yhden ja kahden asunnon talojen todistukset eivät ole julkisia.</li>
+      <li>Aurinkosähköpotentiaali: HSY, <a href="https://hri.fi/data/fi/dataset/paakaupunkiseudun-aurinkosahkopotentiaali" target="_blank" rel="noopener">pääkaupunkiseudun aurinkosähköpotentiaali</a> (2015). CC BY 4.0.</li>
+      <li>Kadunnimien selitykset: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-nimisto" target="_blank" rel="noopener">Helsingin nimistö</a>. CC BY 4.0. Rekisterissä ei ole aiempia nimiä omina tietoinaan: näytetyt nimet on poimittu kielimallilla rekisterin nimihistorioista. Mukana ovat vain nimet, joita katu itse on kantanut, eivät siihen liitetyt kadut, kadut, joiden osa se oli, eivätkä nimiehdotukset. Jokainen nimi löytyy sanatarkasti kadun historiasta.</li>
+      <li>Data ja kartat © Helsingin kaupunki, kaupunkimittauspalvelut. Käyttötarkoitusluokat: Tilastokeskus, Rakennusluokitus 1994.</li>
+      <li>Valtakunnallisesti merkittävät rakennetut kulttuuriympäristöt: Museovirasto, <a href="https://www.rky.fi" target="_blank" rel="noopener">RKY</a>. CC BY 4.0.</li>
+      <li>Maalinnoitus 1914–1918: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/helsingin-ensimmaisen-maailmansodan-aikaiset-maalinnoitukset" target="_blank" rel="noopener">ensimmäisen maailmansodan aikaiset maalinnoitukset</a>, kartoitus 1996. CC BY 4.0.</li>
+      <li>Sotien varustukset: Museovirasto, muinaisjäännösrekisteri, ajoitettuina rekisterin kohdesivujen mukaan. CC BY 4.0.</li>
+      <li>Ilmapuolustuksen asemat 1939–1944 rekisterin ulkopuolelta: koottu ilmatorjunnan historiikeista (Ahti Lappi), Ilmatorjuntamuseolta, Wikipediasta ja paikallislehdistä; jokainen kortti kertoo lähteensä.</li>
+      <li>Sotatuhot: Helsingin kaupunginmuseon kuvat vuosilta 1918 ja 1939–1944 Finnassa, sijoitettuina museon antamaan osoitteeseen. Tekijänoikeudeton (PDM).</li>
+      <li>Raitiotiet: <a href="https://www.openhistoricalmap.org/" target="_blank" rel="noopener">OpenHistoricalMap</a>, CC0.</li>
+      <li>Pysäköintivirheet: Helsingin kaupunki, <a href="https://hri.fi/data/fi/dataset/pysakointivirheet-helsingissa" target="_blank" rel="noopener">pysäköintivirheet</a> vuosilta 2014–2023 osoitteen kadun mukaan. CC BY 4.0.</li>
+      <li>Sodan kaupunki: SA-kuva, Sotamuseon kuva-arkisto, <a href="https://www.finna.fi" target="_blank" rel="noopener">Finnassa</a>, sijoitettu kuvan otsikon nimeämään paikkaan. CC BY 4.0.</li>
+      <li>Kuka asui täällä: <a href="https://fi.wikipedia.org" target="_blank" rel="noopener">suomenkielinen Wikipedia</a>, kunkin artikkelin osoitteen nimeävä virke, <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.fi" target="_blank" rel="noopener">CC BY-SA 4.0</a>, linkitettynä artikkeliin, sekä Wikidata, CC0. Poimittu automaattisesti; talonnumerot ovat voineet muuttua.</li>
+      <li>Museoviraston kuvat: Museoviraston kokoelmat <a href="https://www.finna.fi" target="_blank" rel="noopener">Finnassa</a>, CC BY 4.0; jokaisen kuvan kuvaaja ja kokoelma näkyvät.</li>
+      <li>Sotien muistomerkit ja julkiset taideteokset: HAMin julkiset taideteokset kaupungin <a href="https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta" target="_blank" rel="noopener">Palvelukartasta</a>, käsin valittuina. Tekstit CC BY 4.0; kuvat eivät ole avoimesti lisensoituja, eikä niitä näytetä.</li>
+      <li>Nimet, arkkitehdit ja tyylit: Wikidata, CC0. Artikkeliotteet: Wikipedia, <a href="https://creativecommons.org/licenses/by-sa/4.0/deed.fi" target="_blank" rel="noopener">CC BY-SA 4.0</a>, lyhennettyinä ja linkitettyinä artikkeliin. Kuvat: Wikimedia Commons; jokaisen kuvan tekijä ja lisenssi näkyvät kuvan yhteydessä.</li>
+      <li>Arkistokuvat: <a href="https://www.finna.fi" target="_blank" rel="noopener">Helsingin kaupunginmuseo, Finna</a>, liitetty rakennuksiin museon antaman osoitteen perusteella. Tekijänoikeudeton (PDM) tai CC BY 4.0; jokaisen kuvan kuvaaja ja lisenssi näkyvät, kuva linkittyy Finnan tietueeseen ja latautuu Finnasta.</li>
+    </ul>
+    <h3>Menetelmä</h3>
+    <p>Noin 35 000 rakennukselta puuttuu rekisteristä valmistumisvuosi. Ne ovat lähes kaikki vajoja, varastoja, autotalleja
+    ja kesämökkejä. Muutamalla vuosi on paikkamerkki 1000. Niiden vuosi on arvioitu saman kiinteistön muista rakennuksista
+    tai, jos niitä ei ole, lähimmistä rakennuksista, joilla vuosi on. Ennen vuotta 1930 rekisteri pyöristää monet vuodet
+    tasakymmeniin (1900 esiintyy viisi kertaa niin usein kuin ympäröivät vuodet), ja ylimäärä on levitetty vuosikymmenelle.
+    Arvioidut vuodet näkyvät haaleampina ja merkinnällä ”n.”. Korkeudet ovat kaupungin 3D-kaupunkimallista: rakennuksen
+    kattopintojen korkeuden 70. persentiili, jottei torni tai kupoli nosta koko rakennusta. Rakennukset, joita malli ei
+    yhdistä, lähes kaikki pieniä talousrakennuksia, piirretään kerrosluku kertaa 3,2 m korkuisina. Jokainen visailujen
+    väite on tarkistettu Wikipedia-artikkelista.</p>
+  </article>
+</dialog>
+
+<div class="tally" aria-live="polite">
+  <span id="year" class="tally-year">&nbsp;</span>
+  <span class="tally-count"><span id="count">0</span> buildings</span>
+</div>
+
+<div class="ground">
+  <div id="ground-box" class="ground-box" hidden></div>
+</div>
+<div class="photo-years" role="group" aria-label="Year of the aerial photos">
+  <button data-year="2017" aria-pressed="false">2017</button><button data-year="2024" aria-pressed="true">2024</button>
+</div>
+
+<aside id="panel" class="panel">
+  <button class="sheet-handle" aria-expanded="true" aria-controls="panel-body">Show legend</button>
+  <div id="panel-body"></div>
+</aside>
+
+<div id="card" class="card" hidden></div>
+<section id="quest" class="quest" hidden aria-live="polite"></section>
+<dialog id="quests" class="about quests" aria-labelledby="quests-title">
+  <button class="about-close" aria-label="Close">×</button>
+  <article id="quests-body"></article>
+</dialog>
+<p class="howto">Drag to turn. Right-drag or Shift-drag to move. Scroll to zoom.</p>
+
+<footer class="timeline">
+  <button id="play" class="play" aria-label="Play the city's growth">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path id="play-icon" d="M4 2.5v11l9-5.5z"/></svg>
+  </button>
+  <canvas id="hist" aria-label="Buildings per year; drag to set the year"></canvas>
+</footer>
+
+<div id="loading" class="loading">Building the city <span id="progress">0</span>%</div>
+<!-- The aerial model's loaders (vendor/3d-tiles-renderer, vendor/three-addons) import three by name -->
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/three-addons/" } }</script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
