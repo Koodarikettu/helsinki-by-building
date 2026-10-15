@@ -1556,8 +1556,8 @@ document.querySelectorAll('.modes button[data-mode]').forEach(b => b.onclick = (
   if (activeLayer) activeLayer.groups.forEach((g, i) => { if (groupOn[g.bit] !== false) bits[i] = g.bit; });
   uniforms.uGroupBit.value = bits;
   if (uniforms.uMode.value === MODE.layers && activeLayer) uniforms.uLayerAt.value = performance.now() / 1000;
-  // On a phone the sheet opens only when there is a choice to make: a layer to pick.
-  if (!phone.matches || (uniforms.uMode.value === MODE.layers && !activeLayer)) setCollapsed(false);
+  // A folded legend opens only when there is a choice to make: a layer to pick.
+  if (uniforms.uMode.value === MODE.layers && !activeLayer) setCollapsed(false);
   renderPanel(); drawHist();
 });
 
