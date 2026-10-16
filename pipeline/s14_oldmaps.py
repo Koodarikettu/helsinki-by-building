@@ -1,11 +1,11 @@
-"""Old maps the city's map server lacks, placed on the map by control points (pipeline/oldmaps.json): the Helsinki
-City Archives' scans in Finna (CC BY 4.0) of the city in 1907 and of a competition entry of 1902 for Töölö.
+"""Old maps the city's map server lacks, placed on the map by control points (pipeline/oldmaps.json): scans in Finna
+of the Helsinki City Archives (CC BY 4.0) and of the National Library (public domain, served by Doria).
 
-A map's control points pair a pixel of Finna's large image with a point in ETRS-GK25. The 1907 map's were found by
-matching its features (SIFT) to the city's own georeferenced map of 1909; the 1902 drawing's by template matching to
-the 1907 map, where the city already stood (README). A polynomial of the map's
-order is fitted from the ground to the image by least squares, and the sheet's outline in the image leaves its
-margins out.
+A map's control points pair a pixel of its image (Finna's large one, or the Doria file its "url" names) with a
+point in ETRS-GK25. Most were found by matching the map's features (SIFT) to a map already on the ground that it
+shares its drawing with; the 1902 drawing's by template matching to the 1907 map, where the city already stood
+(README). A polynomial of the map's order is fitted from the ground to the image by least squares, and the sheet's
+outline in the image leaves its margins out.
 
 Writes web/data/oldmaps/<Finna id>/<level>/<i>-<j>.jpg, the ground's quadtree (web/app.js groundTile): 512 px tiles
 from level 0 (65,536 m) down to the map's own level, black outside the sheet as the city's server paints it. The
@@ -27,6 +27,7 @@ from .s03_tiles import ORIGIN
 
 RAW, OUT = Path("data/raw/oldmaps"), Path("web/data/oldmaps")
 MAPS = json.loads((Path(__file__).parent / "oldmaps.json").read_text())
+Image.MAX_IMAGE_PIXELS = max(w * h for w, h in (m["size"] for m in MAPS.values()))  # the largest scan, 94 Mpx
 ROOT, PX = 65536, 512  # web/app.js GROUND_ROOT and GROUND_PX
 LARGE = "https://api.finna.fi/Cover/Show?source=Solr&index=0&size=large"
 UA = {"User-Agent": "helsinki-by-building/0.1 (non-commercial building map)"}
@@ -55,13 +56,14 @@ def tile_box(L: int, i: int, j: int):
 def scan(id: str, m: dict) -> np.ndarray:
     f = RAW / f"{id}.jpg"
     if not f.exists():
-        r = requests.get(LARGE, params={"id": id}, headers=UA, timeout=300)
-        if not (r.ok and r.headers.get("Content-Type") == "image/jpeg"):
-            raise RuntimeError(f"{id}: Finna sent no image")
+        r = requests.get(m["url"], headers=UA, timeout=300) if "url" in m else \
+            requests.get(LARGE, params={"id": id}, headers=UA, timeout=300)
+        if not (r.ok and r.headers.get("Content-Type", "").startswith("image/jpeg")):  # Doria adds ";charset=UTF-8"
+            raise RuntimeError(f"{id}: no image came")
         f.write_bytes(r.content)
     im = Image.open(f)
     if im.size != tuple(m["size"]):  # the control points are in the pixels of the image they were found on
-        raise RuntimeError(f"{id}: Finna's large image is {im.size}, the control points are for {m['size']}")
+        raise RuntimeError(f"{id}: the image is {im.size}, the control points are for {m['size']}")
     return np.asarray(im.convert("RGB"))
 
 

@@ -97,6 +97,8 @@ const FI_UI = {
   'Road traffic noise by day (LAeq 7–22), as each year\'s survey found it.': 'Tieliikenteen melu päivällä (LAeq 7–22) kunkin vuoden meluselvityksessä.',
   'General plan for Greater Helsinki': 'Suur-Helsingin yleissuunnitelma', 'Master plan proposal for the central city': 'Keskiosien yleiskaavaehdotus',
   'Competition entry for Töölö by Gustaf Nyström and Lars Sonck': 'Gustaf Nyströmin ja Lars Sonckin kilpailuehdotus Töölöksi',
+  'Built-up area from 1800 to': 'Rakennettu alue vuodesta 1800 vuoteen',
+  'public domain': 'tekijänoikeudeton',
   'Master plan proposal': 'Yleiskaavaehdotus', 'Revised land use for 1980': 'Tarkistettu maankäyttö vuodelle 1980', 'Master plan': 'Yleiskaava',
   'Pick a year, or drag the timeline: the map changes with it.': 'Valitse vuosi tai vedä aikajanaa: kartta vaihtuu sen mukana.',
   'Hide the buildings': 'Piilota rakennukset', 'No earlier name known': 'Ei aiempaa nimeä tiedossa',
@@ -617,16 +619,18 @@ function pickPhoto(x, y) {
 const GROUND_WMS = 'https://kartta.hel.fi/ws/geoserver/avoindata/wms';
 const GROUND = [  // [year, layer, kind, its button's label if not the year]
   ...[[1749, 'Pitajakuvauskartta_1749'], [1780, 'Rekognosointikartta_1780_1782'], [1820, 'Asemakaavakartta_1820'],
-    [1838, 'Asemakaavakartta_1838'], [1870, 'Senaatinkartta_1870'], [1878, 'Asemakaavakartta_1878'],
+    [1838, 'Asemakaavakartta_1838'], [1860, 'finna:doria.10024_92045'], [1870, 'Senaatinkartta_1870'],
+    [1878, 'Asemakaavakartta_1878'], [1880, 'finna:doria.10024_92043'],
     [1900, 'Plan_af_Helsingfors_1900'], [1907, 'finna:hka.139878320783000_141269050299300'],
-    [1909, 'Kartta_Helsingin_kaupungista_ja_sen_alueista_1909'],
-    [1917, 'Helsingin_kaupunki_1917_1918'], [1920, 'warper:1206'], [1925, 'Helsingin_kaupungin_kartta_1925'],
-    [1935, 'warper:1203'], [1940, 'Helsinki_1940'],  // warper: and finna: maps the city's server lacks, below
+    [1909, 'Kartta_Helsingin_kaupungista_ja_sen_alueista_1909'], [1910, 'finna:hka.139881134288300_141269154371600'],
+    [1913, 'finna:hka.139881134288300_141269087636400'], [1917, 'Helsingin_kaupunki_1917_1918'], [1920, 'warper:1206'],
+    [1925, 'Helsingin_kaupungin_kartta_1925'], [1932, 'finna:doria.10024_92051'], [1935, 'warper:1203'],
+    [1940, 'Helsinki_1940'],  // warper: and finna: maps the city's server lacks, below
     [1952, 'Helsingin_matkailijakartta_1952'], [1962, 'Helsingin_keskustan_kartta_1962'],
     ...[1965, 1966, 1971, 1975, 1977, 1979, 1983, 1985, 1987, 1989, 1991, 1999].map(y => [y, `Opaskartta_${y}`]),
     [2014, 'Kuvakartta'],  // the last dated one: a bird's-eye drawing of the inner city
     [config.yearMax, 'Opaskartta_Helsinki', 'Today'],  // today's guide map, which the city keeps up to date
-  ].map(([y, src, label]) => [y, src, 'map', label]),  // 1917, 1920, 1935, 1940, 1952, 1962 and 2014 show the centre only
+  ].map(([y, src, label]) => [y, src, 'map', label]),  // 1860, 1917, 1920, 1935, 1940, 1952, 1962 and 2014 show the centre only
   ...[...[1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996].map(y => [y, `Ortoilmakuva_${y}`]),
     [2008, 'Ortoilmakuva_2008_25cm'], [2017, 'Ortoilmakuva_2017_20cm'], [2021, 'Ortoilmakuva_2021_10cm'],
     [2025, 'Ortoilmakuva_2025_5cm'],
@@ -654,16 +658,22 @@ function gk25ToMerc(E, N) {
   const lat = p - Math.tan(p) * w / (1 - e2) * D * D / 2, lon = 25 * DEG + D / Math.cos(p);
   return [a * lon, a * Math.log(Math.tan(Math.PI / 4 + lat / 2))];
 }
-// The Helsinki City Archives' scans in Finna (CC BY 4.0), placed by control points and cut into this quadtree by the
-// pipeline (s14_oldmaps): JPEG, black outside the sheet like the city's, and only down to the scan's own level.
+// The Helsinki City Archives' (CC BY 4.0) and the National Library's (public domain) scans in Finna, placed by control
+// points and cut into this quadtree by the pipeline (s14_oldmaps): JPEG, black outside the sheet like the city's, and
+// only down to the scan's own level.
 const FINNA_TILE = (id, L, i, j) => `data/oldmaps/${id}/${L}/${i}-${j}.jpg`;
 const GROUND_KINDS = [['map', 'Old maps'], ['photo', 'Aerial photos'], ['plan', 'Plans'], ['noise', 'Noise']];
 // The Map menu: the scale model, the city with nothing under it; the aerial view's 3D model in its place; then each
 // kind of map under the buildings.
 const MAP_KINDS = [['', 'Scale model'], ['aerial', 'Aerial 3D'], ...GROUND_KINDS];
-const PLAN_NAMES = { 1902: 'Competition entry for Töölö by Gustaf Nyström and Lars Sonck',
-  1923: 'General plan for Greater Helsinki', 1932: 'Master plan proposal for the central city',
-  1960: 'Master plan proposal', 1972: 'Revised land use for 1980', 1992: 'Master plan', 2002: 'Master plan', 2016: 'Master plan' };
+// What the box calls a map, before its year: every plan, and the old maps that are not plain maps of the city.
+const GROUND_NAMES = {
+  'finna:hka.139881134288300_141269154371600': 'Built-up area from 1800 to',  // its legend's shades: 1800, 1825 … 1900, 1910
+  'finna:hka.139881134288300_141269116583700': 'Competition entry for Töölö by Gustaf Nyström and Lars Sonck',
+  Helsingfors_generalplan_for_stor_helsingfors_1923: 'General plan for Greater Helsinki',
+  Helsingin_kaupungin_keskiosien_yleiskaavaehdotus_1932: 'Master plan proposal for the central city',
+  Helsingin_yleiskaavaehdotus_1960: 'Master plan proposal', Tarkistettu_maankaytto_v_1980_1972: 'Revised land use for 1980',
+  Helsingin_yleiskaava_1992: 'Master plan', Yleiskaava_2002: 'Master plan', Yleiskaava_2016: 'Master plan' };
 // The surveys' own colours from 40 dB up in steps of 5, as their legends draw them; 2012's go on to 80 and 85.
 const NOISE_COLORS = ['#dbff91', '#b9ff4c', '#4cb94c', '#ffff4c', '#ffe391', '#ffb94c', '#ff4c4c', '#b94cff', '#704c70', '#5e4c5e'];
 const GROUND_ROOT = 65536, GROUND_PX = 512;
@@ -806,9 +816,10 @@ function drawGroundBox() {
       'Pick a year, or drag the timeline: the map changes with it.')}</p>
     <div class="ground-years">${GROUND.map((e, i) => e[2] !== kind ? '' :
       `<button data-i="${i}" aria-pressed="${e === g}">${e[3] ? t(e[3]) : e[0]}</button>`).join('')}</div>
-    ${kind === 'plan' && g ? `<p class="ground-name">${t(PLAN_NAMES[g[0]])} ${g[0]}</p>` : ''}
+    ${g && GROUND_NAMES[g[1]] ? `<p class="ground-name">${t(GROUND_NAMES[g[1]])} ${g[0]}</p>` : ''}
     ${g?.[1].startsWith('warper:') ? `<p class="ground-name"><a href="https://warper.wmflabs.org/maps/${g[1].slice(7)}" target="_blank" rel="noopener">Wikimedia Commons, Wikimaps Warper</a></p>` : ''}
-    ${g?.[1].startsWith('finna:') ? `<p class="ground-name"><a href="${FINNA_PAGE(g[1].slice(6))}" target="_blank" rel="noopener">Helsingin kaupunginarkisto</a>, CC BY 4.0</p>` : ''}
+    ${g?.[1].startsWith('finna:') ? `<p class="ground-name"><a href="${FINNA_PAGE(g[1].slice(6))}" target="_blank" rel="noopener">${
+      g[1].startsWith('finna:doria.') ? `Kansalliskirjasto</a>, ${t('public domain')}` : 'Helsingin kaupunginarkisto</a>, CC BY 4.0'}</p>` : ''}
     ${kind === 'noise' && g ? `<div class="noise-scale" aria-label="dB">${NOISE_COLORS.slice(0, top).map((c, i) =>
       `<span><i style="background:${c}"></i>${40 + 5 * i}${i === top - 1 ? '+' : ''}</span>`).join('')}</div>` : ''}
     <label><input type="checkbox"${mapAlone ? ' checked' : ''}> ${t('Hide the buildings')}</label></div>`;

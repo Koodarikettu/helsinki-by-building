@@ -8,9 +8,10 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   power its roof could give, or by the heat source the building register records for it.
 - **Back in time.** The timeline plays the city's growth. Go back and the 4,800 buildings demolished since 2008 stand
   again, paler; the Torn down view shows them all at once in the colour of their age. The city's old maps
-  (1749 to today) and aerial photos (1932–2025) can lie under the buildings, or be seen alone with the buildings hidden.
-- **What Helsinki was meant to become.** The city's master plans and their proposals from 1923 to 2016 on the ground,
-  and its road traffic noise as surveyed in 2012, 2017 and 2022.
+  (1749 to today), with the City Archives', the National Library's and Wikimedia Commons' that fill their gaps, and
+  aerial photos (1932–2025) can lie under the buildings, or be seen alone with the buildings hidden.
+- **What Helsinki was meant to become.** The city's master plans and their proposals from 1923 to 2016 and a
+  competition entry of 1902 for Töölö on the ground, and its road traffic noise as surveyed in 2012, 2017 and 2022.
 - **Context layers.** The protection the city's plans give a building, the national heritage areas (RKY) it stands
   in, the buildings in Wikipedia, and who lived here: the homes of well-known people whose Finnish Wikipedia article
   names their Helsinki address, each with the sentence it says so in.
@@ -92,7 +93,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 | `s12_other` | The Other menu: public art by period, the tram tracks through time (`trams.bin`), the Heritage Agency's photos by place (`other.json`) and the parking fines by street and year (`fines.json`, loaded when the view opens) |
 | `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`, the photos scaled in `sathumbs/`) and the war memorials (`war.json`) |
 | `s13_residents` | Well-known people at the Helsinki addresses their Finnish Wikipedia articles name, and Wikidata's links from people to buildings (`data/residents.json`, for `s05_layers`) |
-| `s14_oldmaps` | The City Archives' maps of 1907 and 1902 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`) |
+| `s14_oldmaps` | The City Archives' maps of 1902, 1907, 1910 and 1913 and the National Library's of 1860, 1880 and 1932 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`) |
 
 ## Run it
 
@@ -315,42 +316,65 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   is the white city with nothing under it, and Aerial 3D the aerial view below; each kind under the buildings opens a
   box at the side with a button for each year, which its title folds away. Old maps and
   orthophotos follow the timeline, the one of its year or the nearest before it; a click on a year takes the timeline
-  there. Maps: 1749, 1780, 1820, 1838, 1870, 1878, 1900, 1907, 1909, 1917, 1920, 1925, 1935, 1940, 1952 and 1962
-  (1917, 1920, 1935 and the last three show the centre only), and the guide maps (`Opaskartta_*`) of 1965, 1966, 1971,
-  1975, 1977, 1979, 1983, 1985, 1987, 1989, 1991 and 1999, then the bird's-eye drawing of the inner city of 2014
-  (`Kuvakartta`, the last dated map the city serves) and today's guide map (`Opaskartta_Helsinki`, kept up to date, on
-  a button that reads Today); orthophotos: 1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996, 2008, 2017, 2021
+  there. Maps: 1749, 1780, 1820, 1838, 1860, 1870, 1878, 1880, 1900, 1907, 1909, 1910, 1913, 1917, 1920, 1925, 1932,
+  1935, 1940, 1952 and 1962 (1860, 1917, 1920, 1935 and the last three show the centre only), and the guide maps
+  (`Opaskartta_*`) of 1965, 1966, 1971, 1975, 1977, 1979, 1983, 1985, 1987, 1989, 1991 and 1999, then the bird's-eye
+  drawing of the inner city of 2014 (`Kuvakartta`, the last dated map the city serves) and today's guide map
+  (`Opaskartta_Helsinki`, kept up to date, on a button that reads Today); orthophotos: 1932, 1943, 1950, 1964, 1969,
+  1976, 1988, 1996, 2008, 2017, 2021
   and 2025. The other years cover only a strip of the city or leave holes, as measured on an overview of each layer;
-  the 1800s plan is too faint to read. Three of the maps are not the city's. 1920 and 1935 are Wikimedia Commons scans
+  the 1800s plan is too faint to read. Eight of the maps are not the city's. 1920 and 1935 are Wikimedia Commons scans
   as [Wikimaps Warper](https://warper.wmflabs.org/) georeferenced them (its maps 1206 and 1203): they fall between the
   city's 1917, 1925 and 1940, the years Töölö was built up. Warper's WMS serves no GK25, so each tile asks for the Web
   Mercator box between its corners (`gk25ToMerc` in `web/app.js`). By eye on today's guide map, Töölönlahti and
   Töölö's streets fall where they are today on both. Warper's other Helsinki maps are left out: 1893 and 1899 are the
-  series of the city's 1900, 1924 is a year off 1925, 1815, 1845 and 1929 visibly miss Töölönlahti, 1932 is drawn
-  at too small a scale and 1946 comes in twelve sheets. 1907 is the Helsinki City Archives' *Plan öfver Helsingfors
-  stad och dess ägor* in Finna, placed by `s14_oldmaps` (below). Plans stay whatever the year: the competition entry
-  for Töölö that Gustaf Nyström and Lars Sonck signed in June 1902 (the City Archives' too; the archive notes that it
-  was not necessarily carried out), the general plan for Greater Helsinki of 1923, the master plan proposals of 1932
-  (the central city) and 1960, the revised land use for 1980 drawn in 1972, and the
-  master plans of 1992, 2002 and 2016. Noise is the road traffic noise by day (LAeq 7–22) of the surveys of 2012,
+  series of the city's 1900, 1924 is a year off 1925, 1815, 1845 and 1929 visibly miss Töölönlahti, its small 1932
+  map (1181) is drawn at too small a scale and 1946 comes in twelve sheets; three more of its maps are the National
+  Library's scans, and come with them. 1907, 1910 and 1913 are the Helsinki City Archives' scans in Finna, placed by
+  `s14_oldmaps` (below): *Plan öfver Helsingfors stad och dess ägor*; the built-up area in 1800,
+  1825, 1850, 1875, 1900 and 1910 in six shades, with the population (*Plan über die Entwicklung der Stadt
+  Helsingfors in den Jahren 1800–1910*, which Finna titles "Helsingin kehitys 1890–1910"; the box goes by the sheet
+  and its legend: built-up area from 1800 to 1910); and Pharus's plan of 1913. 1860, 1880 and 1932 are the National
+  Library's scans in Doria, placed the same way: *[Karta öfver Helsingfors]* (dated [1860] in its record), C. H.
+  Nummelin's *Plan af Helsingfors jemte omgifning* and Otava's *Helsingin kartta 1932*. Plans stay whatever the year: the
+  competition entry for Töölö that Gustaf Nyström and Lars Sonck signed in June 1902 (the City Archives' too; the
+  archive notes that it was not necessarily carried out), the general plan for Greater Helsinki of 1923, the master
+  plan proposals of 1932 (the central city) and 1960, the revised land use for 1980 drawn in 1972, and the master
+  plans of 1992, 2002 and 2016. Noise is the road traffic noise by day (LAeq 7–22) of the surveys of 2012,
   2017 and 2022; 2007's covers part of the city on another scale and is left out. The server paints black outside a
   map's sheet and where a photo has nothing, and the map leaves black out; noise comes as PNG and is blended in where
   it is not clear, with a legend of the surveys' own colours (the server's own legend reads 55 for 65). The maps are
   georeferenced: Senaatintori falls on the square in each. The buildings and today's street names can be hidden to
   see a map alone.
-- **The City Archives' maps.** Finna has the archive's scans of 1900–1909, Töölö's competition and plan drawings
-  among them, but none georeferenced. `s14_oldmaps` places two by control points (`pipeline/oldmaps.json`, pixels
-  of Finna's large image paired with ETRS-GK25) and cuts them into the ground's quadtree as JPEG tiles under
-  `web/data/oldmaps/`, 11.6 MB together, black outside the sheet like the city's. The 1907 map's 718 points were
-  matched by their features (OpenCV's SIFT, the ratio test and RANSAC) to the city's map of 1909, drawn at 2 m a
-  pixel; a second-order polynomial holds them to 1.5 px (2.7 m) at the median, and today's street areas fall on its
-  streets. Someone has drawn on it in red and blue by hand; the scan keeps that. In the hand-drawn 1902 entry SIFT
-  finds too little (19 matches against the 1909 map, 9 against the 1900): it was first laid on the 1907 map by two
-  points (Lapinlahti hospital and the sugar factory's long building), then 87 windows of 240 px were matched to the 1907 map by template matching on
-  their edges, in the parts of the city that already stood (Kamppi, the shores, the railway); an affine fit holds
-  them to 4.3 px (2.7 m) at the median, and Kamppi's streets fall on today's. The 1907 map goes to level 6 (2 m a
-  pixel, the scan's own 1.8 m), the drawing to level 8 (0.5 m, the scan's 0.63 m); the map does not split a tile
-  whose four children all fail to load, so it stops at a map's last level.
+- **Finna's maps.** Finna has some 1,470 of the Helsinki City Archives' scanned maps of Helsinki and some 30 distinct
+  scans of the National Library's (in Doria; of its 2,462 hits for Helsinki, the rest are maps of elsewhere published
+  there, or catalogue records), none georeferenced. `s14_oldmaps` places seven by control points
+  (`pipeline/oldmaps.json`, pixels of the image paired with ETRS-GK25: Finna's large image, or the Doria file its
+  `url` names) and cuts them into the ground's quadtree as JPEG tiles under `web/data/oldmaps/`, 49 MB together,
+  black outside the sheet like the city's. The 1907 map's 718 points were matched by their features (OpenCV's SIFT,
+  the ratio test and RANSAC) to the city's map of 1909, drawn at 2 m a pixel; a second-order polynomial holds them to
+  1.5 px (2.7 m) at the median, and today's street areas fall on its streets. Someone has drawn on it in red and blue
+  by hand; the scan keeps that. The 1910 map of the built-up area was matched the same way to the 1909 map drawn at
+  3 m a pixel over 16 km: 393 points, 2.7 px (1.8 m) at the median. Pharus's plan of 1913 matches none of the city's
+  maps (9, 12 and 32 consistent matches against 1909, 1917 and 1925) but does match Pharus's own plan of 1920 as
+  Wikimaps Warper placed it, drawn in Web Mercator and its points turned to GK25 with pyproj: 105 points, 1.0 px
+  (1.1 m) at the median. So it carries Warper's placing; today's street areas fall on its streets in the centre and
+  close by in Töölö, where Pharus draws the streets wider than they are. The National Library's 1860, 1880 and 1932
+  are the very scans Warper has placed (its maps 1197, 1213 and 1167, of the same pixel sizes): SIFT against Warper's
+  picture of each finds 8,000 to 20,000 matches within a pixel, thinned to one in each cell of a 20 × 20 grid (193 to
+  343 points), so they too carry Warper's placing; today's street areas fall on their streets in the centre, and on
+  the 1932 map in Töölö, Kallio and Käpylä as well. The Library's other maps are left out: its 1940 map is the city's
+  own 1940, the same sheet (4,133 matches); the tourist map of 1949 is the series and the two sides of the city's
+  1952; the hand copies of the plans of the 1500s to 1763 are sketches with little to tie to today's streets;
+  Reuter's 1866 map is mounted on linen in panels; 1893 is the series of the city's 1900, and 1894 a 1:30 000 sheet.
+  In the hand-drawn 1902 entry SIFT finds too little (19 matches against the 1909 map, 9 against the 1900): it was
+  first laid on the 1907 map by two points (Lapinlahti hospital and the sugar factory's long building), then 87
+  windows of 240 px were matched to the 1907 map by template matching on their edges, in the parts of the city that
+  already stood (Kamppi, the shores, the railway); an affine fit holds them to 4.3 px (2.7 m) at the median, and
+  Kamppi's streets fall on today's. Each map goes to the level nearest its scan: 1907 and 1932 to level 6 (2 m a
+  pixel; the scans' 1.8 and 1.7 m), 1880, 1910 and 1913 to level 7 (1 m; 1.3, 0.68 and 1.1 m), 1860 and the 1902
+  drawing to level 8 (0.5 m; 0.52 and 0.63 m). The map does not split a tile whose four children all fail to load,
+  so it stops at a map's last level.
 - **Aerial view.** Aerial 3D, in the Map menu, streams the city's photogrammetric mesh from its 2017 or 2024 aerial photos
   (`kartta.hel.fi/3d/mesh/Helsinki_2017/`, `Helsinki_2024/2/`, 3D Tiles) into the same scene with
   [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS); nothing is downloaded by the pipeline. The
@@ -424,10 +448,18 @@ Data keeps the licence of its source:
 - Old maps of 1920 and 1935: Wikimedia Commons, [Pharus-asemakaava Helsinki](https://commons.wikimedia.org/wiki/File:Pharus-asemakaava_Helsinki.jpg)
   (dated 1920 on Commons; public domain) and [Map of Helsinki-Helsingfors 1935](https://commons.wikimedia.org/wiki/File:Map_of_Helsinki-Helsingfors_1935.jpeg)
   (CC0), georeferenced in [Wikimaps Warper](https://warper.wmflabs.org/) and streamed from its WMS.
-- Old maps of 1902 and 1907: Helsinki City Archives (Helsingin kaupunginarkisto) via [Finna](https://www.finna.fi),
-  [Plan öfver Helsingfors stad och dess ägor](https://www.finna.fi/Record/hka.139878320783000_141269050299300) (1907)
+- Old maps of 1902, 1907, 1910 and 1913: Helsinki City Archives (Helsingin kaupunginarkisto) via
+  [Finna](https://www.finna.fi),
+  [Plan öfver Helsingfors stad och dess ägor](https://www.finna.fi/Record/hka.139878320783000_141269050299300) (1907),
+  [Helsingin kehitys 1890–1910](https://www.finna.fi/Record/hka.139881134288300_141269154371600) (1910),
+  [Pharus Plan av Helsingfors](https://www.finna.fi/Record/hka.139881134288300_141269087636400) (1913)
   and [Töölön kilpailu, no 5. Helsingfors XIII–XIV stadsdelar. Nyström & Sonck](https://www.finna.fi/Record/hka.139881134288300_141269116583700)
   (1902). CC BY 4.0. Placed and tiled by the pipeline; the box at the side names the archive and links the record.
+- Old maps of 1860, 1880 and 1932: the National Library of Finland (Kansalliskirjasto) via
+  [Doria](https://www.doria.fi): [[Karta öfver Helsingfors]](https://www.finna.fi/Record/doria.10024_92045) ([1860]),
+  [Plan af Helsingfors jemte omgifning](https://www.finna.fi/Record/doria.10024_92043) (C. H. Nummelin, 1880) and
+  [Helsingin kartta 1932](https://www.finna.fi/Record/doria.10024_92051). Public domain. Placed from Wikimaps Warper's
+  placing of the same scans and tiled by the pipeline.
 - Why streets are so named: City of Helsinki, [Helsingin nimistö](https://hri.fi/data/fi/dataset/helsingin-nimisto),
   WFS layer `Nimisto_piste_rekisteritiedot`. CC BY 4.0. `pipeline/former_names.json` is read out of its histories and
   shares its licence.
