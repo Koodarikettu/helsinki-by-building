@@ -93,9 +93,10 @@ const FI_UI = {
   'Wikidata records this building as their birthplace.': 'Wikidatan mukaan henkilö syntyi tässä.',
   'Wikidata records this building as the place where they died.': 'Wikidatan mukaan henkilö kuoli tässä.',
   'Period': 'Aikakausi', 'Context layers': 'Kontekstitasot', 'Floors': 'Kerrokset', 'Energy': 'Energia', 'Aerial 3D': 'Ilmakuva 3D', 'Map': 'Kartta', 'Scale model': 'Pienoismalli', 'Under the buildings': 'Rakennusten alla', 'Old maps': 'Vanhat kartat', 'Aerial photos': 'Ilmakuvat', 'Plans': 'Kaavat', 'Noise': 'Melu',
-  'What Helsinki was meant to become: the city\'s master plans and their proposals.': 'Millainen Helsingistä piti tulla: kaupungin yleiskaavat ja niiden ehdotukset.',
+  'What Helsinki was meant to become: the city\'s master plans and their proposals, and a competition entry for Töölö.': 'Millainen Helsingistä piti tulla: kaupungin yleiskaavat ja niiden ehdotukset sekä Töölön kilpailuehdotus.',
   'Road traffic noise by day (LAeq 7–22), as each year\'s survey found it.': 'Tieliikenteen melu päivällä (LAeq 7–22) kunkin vuoden meluselvityksessä.',
   'General plan for Greater Helsinki': 'Suur-Helsingin yleissuunnitelma', 'Master plan proposal for the central city': 'Keskiosien yleiskaavaehdotus',
+  'Competition entry for Töölö by Gustaf Nyström and Lars Sonck': 'Gustaf Nyströmin ja Lars Sonckin kilpailuehdotus Töölöksi',
   'Master plan proposal': 'Yleiskaavaehdotus', 'Revised land use for 1980': 'Tarkistettu maankäyttö vuodelle 1980', 'Master plan': 'Yleiskaava',
   'Pick a year, or drag the timeline: the map changes with it.': 'Valitse vuosi tai vedä aikajanaa: kartta vaihtuu sen mukana.',
   'Hide the buildings': 'Piilota rakennukset', 'No earlier name known': 'Ei aiempaa nimeä tiedossa',
@@ -617,28 +618,51 @@ const GROUND_WMS = 'https://kartta.hel.fi/ws/geoserver/avoindata/wms';
 const GROUND = [  // [year, layer, kind, its button's label if not the year]
   ...[[1749, 'Pitajakuvauskartta_1749'], [1780, 'Rekognosointikartta_1780_1782'], [1820, 'Asemakaavakartta_1820'],
     [1838, 'Asemakaavakartta_1838'], [1870, 'Senaatinkartta_1870'], [1878, 'Asemakaavakartta_1878'],
-    [1900, 'Plan_af_Helsingfors_1900'], [1909, 'Kartta_Helsingin_kaupungista_ja_sen_alueista_1909'],
-    [1917, 'Helsingin_kaupunki_1917_1918'], [1925, 'Helsingin_kaupungin_kartta_1925'], [1940, 'Helsinki_1940'],
+    [1900, 'Plan_af_Helsingfors_1900'], [1907, 'finna:hka.139878320783000_141269050299300'],
+    [1909, 'Kartta_Helsingin_kaupungista_ja_sen_alueista_1909'],
+    [1917, 'Helsingin_kaupunki_1917_1918'], [1920, 'warper:1206'], [1925, 'Helsingin_kaupungin_kartta_1925'],
+    [1935, 'warper:1203'], [1940, 'Helsinki_1940'],  // warper: and finna: maps the city's server lacks, below
     [1952, 'Helsingin_matkailijakartta_1952'], [1962, 'Helsingin_keskustan_kartta_1962'],
     ...[1965, 1966, 1971, 1975, 1977, 1979, 1983, 1985, 1987, 1989, 1991, 1999].map(y => [y, `Opaskartta_${y}`]),
     [2014, 'Kuvakartta'],  // the last dated one: a bird's-eye drawing of the inner city
     [config.yearMax, 'Opaskartta_Helsinki', 'Today'],  // today's guide map, which the city keeps up to date
-  ].map(([y, src, label]) => [y, src, 'map', label]),  // 1917, 1940, 1952, 1962 and 2014 show the centre only
+  ].map(([y, src, label]) => [y, src, 'map', label]),  // 1917, 1920, 1935, 1940, 1952, 1962 and 2014 show the centre only
   ...[...[1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996].map(y => [y, `Ortoilmakuva_${y}`]),
     [2008, 'Ortoilmakuva_2008_25cm'], [2017, 'Ortoilmakuva_2017_20cm'], [2021, 'Ortoilmakuva_2021_10cm'],
     [2025, 'Ortoilmakuva_2025_5cm'],
   ].map(g => [...g, 'photo']),  // years whose photo covers the city; the rest cover a strip or leave holes
-  ...[[1923, 'Helsingfors_generalplan_for_stor_helsingfors_1923'], [1932, 'Helsingin_kaupungin_keskiosien_yleiskaavaehdotus_1932'],
+  ...[[1902, 'finna:hka.139881134288300_141269116583700'],
+    [1923, 'Helsingfors_generalplan_for_stor_helsingfors_1923'], [1932, 'Helsingin_kaupungin_keskiosien_yleiskaavaehdotus_1932'],
     [1960, 'Helsingin_yleiskaavaehdotus_1960'], [1972, 'Tarkistettu_maankaytto_v_1980_1972'], [1992, 'Helsingin_yleiskaava_1992'],
     [2002, 'Yleiskaava_2002'], [2016, 'Yleiskaava_2016']].map(g => [...g, 'plan']),
   ...[[2012, 'Meluselvitys_2012_alue_01_tieliikenne_L_Aeq_paiva'], [2017, 'Meluselvitys_2017_alue_01_tieliikenne_L_Aeq_paiva'],
     [2022, 'Meluselvitys_2022_Helsinki_kadut_ja_maantiet_LAeq_7-22_NPM']].map(g => [...g, 'noise']),  // 2007's covers part of the city, on another scale
 ];
+// Old maps from Wikimedia Commons that fill the city's gaps, as Wikimaps Warper georeferenced them (public domain).
+// Its WMS speaks no GK25, so a tile asks for the Web Mercator box between its corners: the grids turn 0.07° apart by
+// Töölö, which shifts a tile's picture by a pixel at most. Unlike the city's, these come as PNG, see-through outside
+// the sheet.
+const WARPER_WMS = 'https://warper.wmflabs.org/maps/wms/';
+// ETRS-GK25 to Web Mercator: the transverse Mercator inverted (Snyder 1987, 3-26 and 8-18 to 8-25), less the terms
+// worth under half a metre within 20 km of 25° E.
+function gk25ToMerc(E, N) {
+  const a = 6378137, e2 = 0.0066943800229, r = Math.sqrt(1 - e2), e1 = (1 - r) / (1 + r);
+  const mu = N / (a * (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256));
+  const p = mu + (1.5 * e1 - 27 / 32 * e1 ** 3) * Math.sin(2 * mu) + (21 / 16 * e1 ** 2 - 55 / 32 * e1 ** 4) * Math.sin(4 * mu)
+    + 151 / 96 * e1 ** 3 * Math.sin(6 * mu) + 1097 / 512 * e1 ** 4 * Math.sin(8 * mu);
+  const w = 1 - e2 * Math.sin(p) ** 2, D = (E - 25500000) * Math.sqrt(w) / a;
+  const lat = p - Math.tan(p) * w / (1 - e2) * D * D / 2, lon = 25 * DEG + D / Math.cos(p);
+  return [a * lon, a * Math.log(Math.tan(Math.PI / 4 + lat / 2))];
+}
+// The Helsinki City Archives' scans in Finna (CC BY 4.0), placed by control points and cut into this quadtree by the
+// pipeline (s14_oldmaps): JPEG, black outside the sheet like the city's, and only down to the scan's own level.
+const FINNA_TILE = (id, L, i, j) => `data/oldmaps/${id}/${L}/${i}-${j}.jpg`;
 const GROUND_KINDS = [['map', 'Old maps'], ['photo', 'Aerial photos'], ['plan', 'Plans'], ['noise', 'Noise']];
 // The Map menu: the scale model, the city with nothing under it; the aerial view's 3D model in its place; then each
 // kind of map under the buildings.
 const MAP_KINDS = [['', 'Scale model'], ['aerial', 'Aerial 3D'], ...GROUND_KINDS];
-const PLAN_NAMES = { 1923: 'General plan for Greater Helsinki', 1932: 'Master plan proposal for the central city',
+const PLAN_NAMES = { 1902: 'Competition entry for Töölö by Gustaf Nyström and Lars Sonck',
+  1923: 'General plan for Greater Helsinki', 1932: 'Master plan proposal for the central city',
   1960: 'Master plan proposal', 1972: 'Revised land use for 1980', 1992: 'Master plan', 2002: 'Master plan', 2016: 'Master plan' };
 // The surveys' own colours from 40 dB up in steps of 5, as their legends draw them; 2012's go on to 80 and 85.
 const NOISE_COLORS = ['#dbff91', '#b9ff4c', '#4cb94c', '#ffff4c', '#ffe391', '#ffb94c', '#ff4c4c', '#b94cff', '#704c70', '#5e4c5e'];
@@ -675,11 +699,16 @@ function groundTile(src, L, i, j, load) {
   if (!t && load) {
     const s = GROUND_ROOT / 2 ** L, x = -GROUND_ROOT / 2 + i * s, z = -GROUND_ROOT / 2 + j * s;
     const e = config.origin[0] + x, n = config.origin[1] - z;  // west and north edges; WMS 1.3.0 puts northing first
-    const clear = src.startsWith('Melu');
+    const warper = src.startsWith('warper:'), clear = warper || src.startsWith('Melu');
     groundTiles.set(key, t = { mesh: null, ready: false, used: 0 });
-    groundLoader.load(`${GROUND_WMS}?service=WMS&version=1.3.0&request=GetMap&layers=avoindata:${src}&styles=&crs=EPSG:3879` +
+    const url = warper ? `${WARPER_WMS}${src.slice(7)}?service=WMS&version=1.1.1&request=GetMap&layers=image&styles=` +
+      `&srs=EPSG:3857&bbox=${[...gk25ToMerc(e, n - s), ...gk25ToMerc(e + s, n)]}&width=${GROUND_PX}&height=${GROUND_PX}` +
+      '&format=image/png&transparent=true'
+      : src.startsWith('finna:') ? FINNA_TILE(src.slice(6), L, i, j)
+      : `${GROUND_WMS}?service=WMS&version=1.3.0&request=GetMap&layers=avoindata:${src}&styles=&crs=EPSG:3879` +
       `&bbox=${n - s},${e},${n},${e + s}&width=${GROUND_PX}&height=${GROUND_PX}` +
-      (clear ? '&format=image/png&transparent=true' : '&format=image/jpeg&bgcolor=0x000000'), tex => {
+      (clear ? '&format=image/png&transparent=true' : '&format=image/jpeg&bgcolor=0x000000');
+    groundLoader.load(url, tex => {
       Object.assign(tex, { colorSpace: THREE.NoColorSpace, anisotropy: 8 });
       t.mesh = new THREE.Mesh(groundGeo, new THREE.ShaderMaterial({ ...GROUND_SHADER, uniforms: { map: { value: tex }, clear: { value: clear } } }));
       t.mesh.position.set(x + s / 2, 0.1, z + s / 2);
@@ -713,8 +742,10 @@ function updateGround() {
     const t = groundTile(src, L, i, j, true), s = GROUND_ROOT / 2 ** L;
     if (L < maxL && s * f / Math.max(1, gbox.distanceToPoint(camera.position)) > GROUND_PX) {
       const kids = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([a, b]) => [L + 1, 2 * i + a, 2 * j + b]).filter(k => inView(...k));
-      // Split once every child in view has arrived; until then this tile stands in for them.
-      if (kids.map(k => groundTile(src, ...k, true)).every(k => k.ready)) return kids.forEach(k => visit(...k));
+      // Split once every child in view has arrived; until then this tile stands in for them. Children that all came
+      // to nothing (below a pipeline map's deepest level, or a server down) leave it standing for good.
+      const ks = kids.map(k => groundTile(src, ...k, true));
+      if (ks.every(k => k.ready) && ks.some(k => k.mesh)) return kids.forEach(k => visit(...k));
     }
     // A new year's tile still on its way: the year before's stays where it was.
     const shown = t.ready ? t : groundPrev && groundTile(groundPrev, L, i, j, false);
@@ -770,12 +801,14 @@ function drawGroundBox() {
   const top = g?.[0] === 2012 ? 10 : 8;
   groundBox.classList.toggle('folded', groundFolded);
   groundBox.innerHTML = `<button class="box-fold" data-fold="1" aria-expanded="${!groundFolded}">${t(GROUND_KINDS.find(([k]) => k === kind)[1])}</button>
-    <div class="box-body"${groundFolded ? ' hidden' : ''}><p>${t({ plan: 'What Helsinki was meant to become: the city\'s master plans and their proposals.',
+    <div class="box-body"${groundFolded ? ' hidden' : ''}><p>${t({ plan: 'What Helsinki was meant to become: the city\'s master plans and their proposals, and a competition entry for Töölö.',
       noise: 'Road traffic noise by day (LAeq 7–22), as each year\'s survey found it.' }[kind] ||
       'Pick a year, or drag the timeline: the map changes with it.')}</p>
     <div class="ground-years">${GROUND.map((e, i) => e[2] !== kind ? '' :
       `<button data-i="${i}" aria-pressed="${e === g}">${e[3] ? t(e[3]) : e[0]}</button>`).join('')}</div>
     ${kind === 'plan' && g ? `<p class="ground-name">${t(PLAN_NAMES[g[0]])} ${g[0]}</p>` : ''}
+    ${g?.[1].startsWith('warper:') ? `<p class="ground-name"><a href="https://warper.wmflabs.org/maps/${g[1].slice(7)}" target="_blank" rel="noopener">Wikimedia Commons, Wikimaps Warper</a></p>` : ''}
+    ${g?.[1].startsWith('finna:') ? `<p class="ground-name"><a href="${FINNA_PAGE(g[1].slice(6))}" target="_blank" rel="noopener">Helsingin kaupunginarkisto</a>, CC BY 4.0</p>` : ''}
     ${kind === 'noise' && g ? `<div class="noise-scale" aria-label="dB">${NOISE_COLORS.slice(0, top).map((c, i) =>
       `<span><i style="background:${c}"></i>${40 + 5 * i}${i === top - 1 ? '+' : ''}</span>`).join('')}</div>` : ''}
     <label><input type="checkbox"${mapAlone ? ' checked' : ''}> ${t('Hide the buildings')}</label></div>`;
@@ -1138,8 +1171,7 @@ function siteHtml(s, pinned) {
     credit: `${[a.t, a.y, a.m].filter(Boolean).map(esc).join(', ')}, ${pinned
       ? `${link(FINNA_PAGE(a.r), a.o || 'Helsingin kaupunginmuseo')}, ${link(LICENCE[a.l], a.l)}` : `${esc(a.o || 'Helsingin kaupunginmuseo')}, ${esc(a.l)}`}` }));
   slide = 0;
-  // a kind whose photos are too large to fetch on a hover (SA-kuva's originals) shows them once the card is pinned
-  return `<button class="card-close" aria-label="${t('Close')}">×</button>${slides.length && (pinned || !K.large) ? figureHtml(pinned) : ''}
+  return `<button class="card-close" aria-label="${t('Close')}">×</button>${slides.length ? figureHtml(pinned) : ''}
     <header class="card-head"><h3>${esc(tr(s, 'name'))}</h3>${tr(s, 'sub') ? `<p class="sv">${esc(tr(s, 'sub'))}</p>` : ''}</header>
     ${s.rows ? `<section><dl>${s.rows.map(([k, v]) => `<dt>${t(k)}</dt><dd lang="fi">${esc(v)}</dd>`).join('')}</dl></section>` : ''}
     ${tr(s, 'text') ? `<section><p class="why">${esc(tr(s, 'text'))}</p></section>` : ''}
@@ -1277,9 +1309,10 @@ function archiveOf(bag, then) {
   }
   return archiveShards[n]?.[bag] || [];
 }
-// Images and records straight from Finna, 600 px wide at most: for SA-kuva's photos Finna has no smaller size than
-// the original (4,900 px, 4–8 MB), but w= has it scaled down (70 KB).
-const FINNA_IMG = id => `https://api.finna.fi/Cover/Show?source=Solr&id=${encodeURIComponent(id)}&index=0&size=medium&w=600`;
+// Images and records straight from Finna, 600 px wide at most; SA-kuva's photos, which Finna takes seconds to scale
+// down from their 4–8 MB originals, come scaled with the map (s11_war).
+const FINNA_IMG = id => id.startsWith('sa-kuva.') ? `data/sathumbs/${id.split('/').pop()}.jpg`
+  : `https://api.finna.fi/Cover/Show?source=Solr&id=${encodeURIComponent(id)}&index=0&size=medium&w=600`;
 const FINNA_PAGE = id => `https://www.finna.fi/Record/${encodeURIComponent(id)}`;
 const LICENCE = { 'PDM': 'https://creativecommons.org/publicdomain/mark/1.0/', 'CC0': 'https://creativecommons.org/publicdomain/zero/1.0/',
   'CC BY 4.0': 'https://creativecommons.org/licenses/by/4.0/' };

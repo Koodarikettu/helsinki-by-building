@@ -17,7 +17,8 @@ Photos: the Helsinki City Museum's in Finna (s00_fetch), from the war's years, o
 that the city's address points place; one dot per address. And the Defence Forces' photos of 1939–1945 (SA-kuva, the
 Military Museum's archive, CC BY 4.0) whose title or place names an address, a building or a spot in the city, inflected
 or not ("Silakoita Kauppatorilla", "Asemiesilta Messuhallissa"); a district is too coarse and is left out. One dot per
-place; its photos come from shards (web/data/saphotos/<nn>.json) when its card opens.
+place; its photos come from shards (web/data/saphotos/<nn>.json) when its card opens, and are served with the map
+(web/data/sathumbs/<n>.jpg).
 Memorials: works of the city's public art (the Service Map; HAM's texts CC BY 4.0, its photos not open), picked by hand
 below.
 
@@ -28,15 +29,20 @@ import csv
 import html
 import json
 import re
+import shutil
+import time
 import zlib
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
+import requests
 import shapely
 from pyproj import Transformer
 
+from .s00_fetch import UA
 from .s03_tiles import to_local
 from .s08_archive import OPEN, addresses, keys_of, person
 
@@ -388,6 +394,36 @@ def place_named(text: str, spots: dict):
     return best
 
 
+# Finna has no smaller size of SA-kuva's photos than the originals (4,900 px, 4–8 MB), and scaling one down (w=600, some
+# 70 KB) takes it 3–9 s whenever the server asked has not done it before. So each placed photo is scaled once, kept in
+# data/raw/sa_thumbs/ and served with the map: sathumbs/<number in its id>.jpg.
+SA_THUMB = "https://api.finna.fi/Cover/Show?source=Solr&index=0&size=medium&w=600"
+
+
+def sa_thumbs(ids: set):
+    cache, out = RAW / "sa_thumbs", OUT / "sathumbs"
+    cache.mkdir(exist_ok=True)
+    out.mkdir(exist_ok=True)
+
+    def get(id):
+        f = cache / f"{id.rsplit('/', 1)[1]}.jpg"
+        for _ in range(5):  # Finna sends its "no image" GIF now and then, when the archive is slow
+            if f.exists():
+                break
+            r = requests.get(SA_THUMB, params={"id": id}, headers=UA, timeout=120)
+            if r.ok and r.headers.get("Content-Type") == "image/jpeg":
+                f.write_bytes(r.content)
+            else:
+                time.sleep(30)
+        if not f.exists():
+            raise RuntimeError(f"{id}: Finna sent no photo")
+        shutil.copyfile(f, out / f.name)
+
+    with ThreadPoolExecutor(4) as ex:
+        list(ex.map(get, sorted(ids)))
+    print("SA-kuva photos scaled", len(ids))
+
+
 def sa_photos(addr: dict, spots: dict) -> list:
     """The SA-kuva photos whose place or title names one place in the city, one dot per place; the first photo stays on
     the page, the rest go to shards. The record's own place goes before its title."""
@@ -412,6 +448,7 @@ def sa_photos(addr: dict, spots: dict) -> list:
         site = by.setdefault(place[0], dict(at=at(place[1], place[2]), name=place[0], photos=[]))
         site["photos"].append({k: v for k, v in dict(r=r["id"], y=year, t=clean(title), m=maker, l="CC BY 4.0",
                                                       o="SA-kuva").items() if v})
+    sa_thumbs({p["r"] for s in by.values() for p in s["photos"]})
     sites, shards = [], [{} for _ in range(SHARDS)]
     for s in by.values():
         ph = sorted(s["photos"], key=lambda p: p.get("y") or 9999)
@@ -544,8 +581,7 @@ def main():
                          dict(label="Literature and articles; each card names its own", label_fi="Kirjallisuus ja artikkelit; kortti kertoo omansa",
                               url=HISTORY["url"], url_fi=HISTORY["url_fi"]), group="defences"),
                     kind("photos", "Bomb damage", "Pommitusten tuhot", pho[1], MUSEUM),
-                    # its photos are originals of 4–8 MB, which Finna serves at no smaller size: loaded on a click only
-                    kind("sa", "The city at war, SA-kuva", "Sodan kaupunki, SA-kuva", sa, SA, shards="saphotos", large=True),
+                    kind("sa", "The city at war, SA-kuva", "Sodan kaupunki, SA-kuva", sa, SA, shards="saphotos"),
                     kind("memorials", "Memorials", "Muistomerkit", mem[1], ART)]),
     ]
     (OUT / "war.json").write_text(json.dumps(dict(eras=eras), ensure_ascii=False, separators=(",", ":")))

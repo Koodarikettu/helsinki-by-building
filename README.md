@@ -90,15 +90,16 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 | `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
 | `s12_other` | The Other menu: public art by period, the tram tracks through time (`trams.bin`), the Heritage Agency's photos by place (`other.json`) and the parking fines by street and year (`fines.json`, loaded when the view opens) |
-| `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`) and the war memorials (`war.json`) |
+| `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`, the photos scaled in `sathumbs/`) and the war memorials (`war.json`) |
 | `s13_residents` | Well-known people at the Helsinki addresses their Finnish Wikipedia articles name, and Wikidata's links from people to buildings (`data/residents.json`, for `s05_layers`) |
+| `s14_oldmaps` | The City Archives' maps of 1907 and 1902 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`) |
 
 ## Run it
 
 ```bash
 uv sync
-for s in s00_fetch s01_load s02_attributes s13_residents s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war s12_other; do uv run python -m pipeline.$s; done
-uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11 && uv run python -m pipeline.test_s12 && uv run python -m pipeline.test_s13   # years, street names, addresses, energy, war, photos and fines, residents
+for s in s00_fetch s01_load s02_attributes s13_residents s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war s12_other s14_oldmaps; do uv run python -m pipeline.$s; done
+uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11 && uv run python -m pipeline.test_s12 && uv run python -m pipeline.test_s13 && uv run python -m pipeline.test_s14   # years, street names, addresses, energy, war, photos and fines, residents, old maps
 python3 -m http.server 8642 --directory web
 ```
 
@@ -247,9 +248,10 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   places the archive names, the Messuhalli and the naval station, are in neither list, and are left out. Finna has
   no smaller size of the archive's photos than the originals, 4,900 px and 4–8 MB each, but scales one down when
   asked for a width (`w=600`, some 70 KB), as the map asks for every Finna photo; a photo Finna has not served before
-  still takes it 3–6 s, while it fetches the original from the archive. So a card loads its photo when it is pinned,
-  not on a hover, and while it is open fetches the three photos after the one shown and the two before; the photo
-  shown fades until the next has come.
+  still takes it 3–9 s, while it fetches the original from the archive. So the pipeline has each placed photo scaled
+  once (cached in `data/raw/sa_thumbs/`) and the map serves it itself. Finna is as slow over the other archives'
+  photos, so an open card fetches the three photos after the one shown and the two before; the photo shown fades
+  until the next has come.
 - **Other.** A menu like War's, of views that lie on the ground (`s12_other`): public art, every work of the city's
   public art in the Service Map coloured by the period of the year in its credit ("Artist: Title, 1970"; 79 give
   none); the trams, OpenHistoricalMap's tram tracks (CC0, drawn by volunteers) with the years each opened and closed
@@ -313,20 +315,42 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   is the white city with nothing under it, and Aerial 3D the aerial view below; each kind under the buildings opens a
   box at the side with a button for each year, which its title folds away. Old maps and
   orthophotos follow the timeline, the one of its year or the nearest before it; a click on a year takes the timeline
-  there. Maps: 1749, 1780, 1820, 1838, 1870, 1878, 1900, 1909, 1917, 1925, 1940, 1952 and 1962 (the last three, like
-  1917, show the centre only), and the guide maps (`Opaskartta_*`) of 1965, 1966, 1971, 1975, 1977, 1979, 1983,
-  1985, 1987, 1989, 1991 and 1999, then the bird's-eye drawing of the inner city of 2014 (`Kuvakartta`, the last dated
-  map the city serves) and today's guide map (`Opaskartta_Helsinki`, kept up to date, on a button that reads Today);
-  orthophotos: 1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996, 2008, 2017, 2021
+  there. Maps: 1749, 1780, 1820, 1838, 1870, 1878, 1900, 1907, 1909, 1917, 1920, 1925, 1935, 1940, 1952 and 1962
+  (1917, 1920, 1935 and the last three show the centre only), and the guide maps (`Opaskartta_*`) of 1965, 1966, 1971,
+  1975, 1977, 1979, 1983, 1985, 1987, 1989, 1991 and 1999, then the bird's-eye drawing of the inner city of 2014
+  (`Kuvakartta`, the last dated map the city serves) and today's guide map (`Opaskartta_Helsinki`, kept up to date, on
+  a button that reads Today); orthophotos: 1932, 1943, 1950, 1964, 1969, 1976, 1988, 1996, 2008, 2017, 2021
   and 2025. The other years cover only a strip of the city or leave holes, as measured on an overview of each layer;
-  the 1800s plan is too faint to read. Plans stay whatever the year: the general plan for Greater Helsinki of 1923,
-  the master plan proposals of 1932 (the central city) and 1960, the revised land use for 1980 drawn in 1972, and the
+  the 1800s plan is too faint to read. Three of the maps are not the city's. 1920 and 1935 are Wikimedia Commons scans
+  as [Wikimaps Warper](https://warper.wmflabs.org/) georeferenced them (its maps 1206 and 1203): they fall between the
+  city's 1917, 1925 and 1940, the years Töölö was built up. Warper's WMS serves no GK25, so each tile asks for the Web
+  Mercator box between its corners (`gk25ToMerc` in `web/app.js`). By eye on today's guide map, Töölönlahti and
+  Töölö's streets fall where they are today on both. Warper's other Helsinki maps are left out: 1893 and 1899 are the
+  series of the city's 1900, 1924 is a year off 1925, 1815, 1845 and 1929 visibly miss Töölönlahti, 1932 is drawn
+  at too small a scale and 1946 comes in twelve sheets. 1907 is the Helsinki City Archives' *Plan öfver Helsingfors
+  stad och dess ägor* in Finna, placed by `s14_oldmaps` (below). Plans stay whatever the year: the competition entry
+  for Töölö that Gustaf Nyström and Lars Sonck signed in June 1902 (the City Archives' too; the archive notes that it
+  was not necessarily carried out), the general plan for Greater Helsinki of 1923, the master plan proposals of 1932
+  (the central city) and 1960, the revised land use for 1980 drawn in 1972, and the
   master plans of 1992, 2002 and 2016. Noise is the road traffic noise by day (LAeq 7–22) of the surveys of 2012,
   2017 and 2022; 2007's covers part of the city on another scale and is left out. The server paints black outside a
   map's sheet and where a photo has nothing, and the map leaves black out; noise comes as PNG and is blended in where
   it is not clear, with a legend of the surveys' own colours (the server's own legend reads 55 for 65). The maps are
   georeferenced: Senaatintori falls on the square in each. The buildings and today's street names can be hidden to
   see a map alone.
+- **The City Archives' maps.** Finna has the archive's scans of 1900–1909, Töölö's competition and plan drawings
+  among them, but none georeferenced. `s14_oldmaps` places two by control points (`pipeline/oldmaps.json`, pixels
+  of Finna's large image paired with ETRS-GK25) and cuts them into the ground's quadtree as JPEG tiles under
+  `web/data/oldmaps/`, 11.6 MB together, black outside the sheet like the city's. The 1907 map's 718 points were
+  matched by their features (OpenCV's SIFT, the ratio test and RANSAC) to the city's map of 1909, drawn at 2 m a
+  pixel; a second-order polynomial holds them to 1.5 px (2.7 m) at the median, and today's street areas fall on its
+  streets. Someone has drawn on it in red and blue by hand; the scan keeps that. In the hand-drawn 1902 entry SIFT
+  finds too little (19 matches against the 1909 map, 9 against the 1900): it was first laid on the 1907 map by two
+  points (Lapinlahti hospital and the sugar factory's long building), then 87 windows of 240 px were matched to the 1907 map by template matching on
+  their edges, in the parts of the city that already stood (Kamppi, the shores, the railway); an affine fit holds
+  them to 4.3 px (2.7 m) at the median, and Kamppi's streets fall on today's. The 1907 map goes to level 6 (2 m a
+  pixel, the scan's own 1.8 m), the drawing to level 8 (0.5 m, the scan's 0.63 m); the map does not split a tile
+  whose four children all fail to load, so it stops at a map's last level.
 - **Aerial view.** Aerial 3D, in the Map menu, streams the city's photogrammetric mesh from its 2017 or 2024 aerial photos
   (`kartta.hel.fi/3d/mesh/Helsinki_2017/`, `Helsinki_2024/2/`, 3D Tiles) into the same scene with
   [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS); nothing is downloaded by the pipeline. The
@@ -397,6 +421,13 @@ Data keeps the licence of its source:
   and the older ones and the guide maps in the city's open WMS layers) and
   [Helsingin kaupungin meluselvitykset](https://hri.fi/data/fi/dataset/helsingin-kaupungin-meluselvitys-2017), WMS
   layers `avoindata:Ortoilmakuva_*` and the others named in `web/app.js`, streamed from the city's map server. CC BY 4.0.
+- Old maps of 1920 and 1935: Wikimedia Commons, [Pharus-asemakaava Helsinki](https://commons.wikimedia.org/wiki/File:Pharus-asemakaava_Helsinki.jpg)
+  (dated 1920 on Commons; public domain) and [Map of Helsinki-Helsingfors 1935](https://commons.wikimedia.org/wiki/File:Map_of_Helsinki-Helsingfors_1935.jpeg)
+  (CC0), georeferenced in [Wikimaps Warper](https://warper.wmflabs.org/) and streamed from its WMS.
+- Old maps of 1902 and 1907: Helsinki City Archives (Helsingin kaupunginarkisto) via [Finna](https://www.finna.fi),
+  [Plan öfver Helsingfors stad och dess ägor](https://www.finna.fi/Record/hka.139878320783000_141269050299300) (1907)
+  and [Töölön kilpailu, no 5. Helsingfors XIII–XIV stadsdelar. Nyström & Sonck](https://www.finna.fi/Record/hka.139881134288300_141269116583700)
+  (1902). CC BY 4.0. Placed and tiled by the pipeline; the box at the side names the archive and links the record.
 - Why streets are so named: City of Helsinki, [Helsingin nimistö](https://hri.fi/data/fi/dataset/helsingin-nimisto),
   WFS layer `Nimisto_piste_rekisteritiedot`. CC BY 4.0. `pipeline/former_names.json` is read out of its histories and
   shares its licence.
