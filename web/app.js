@@ -642,26 +642,10 @@ const GROUND = [  // [year, layer, kind, its button's label if not the year]
   ...[[2012, 'Meluselvitys_2012_alue_01_tieliikenne_L_Aeq_paiva'], [2017, 'Meluselvitys_2017_alue_01_tieliikenne_L_Aeq_paiva'],
     [2022, 'Meluselvitys_2022_Helsinki_kadut_ja_maantiet_LAeq_7-22_NPM']].map(g => [...g, 'noise']),  // 2007's covers part of the city, on another scale
 ];
-// Old maps from Wikimedia Commons that fill the city's gaps, as Wikimaps Warper georeferenced them (public domain).
-// Its WMS speaks no GK25, so a tile asks for the Web Mercator box between its corners: the grids turn 0.07° apart by
-// Töölö, which shifts a tile's picture by a pixel at most. Unlike the city's, these come as PNG, see-through outside
-// the sheet.
-const WARPER_WMS = 'https://warper.wmflabs.org/maps/wms/';
-// ETRS-GK25 to Web Mercator: the transverse Mercator inverted (Snyder 1987, 3-26 and 8-18 to 8-25), less the terms
-// worth under half a metre within 20 km of 25° E.
-function gk25ToMerc(E, N) {
-  const a = 6378137, e2 = 0.0066943800229, r = Math.sqrt(1 - e2), e1 = (1 - r) / (1 + r);
-  const mu = N / (a * (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256));
-  const p = mu + (1.5 * e1 - 27 / 32 * e1 ** 3) * Math.sin(2 * mu) + (21 / 16 * e1 ** 2 - 55 / 32 * e1 ** 4) * Math.sin(4 * mu)
-    + 151 / 96 * e1 ** 3 * Math.sin(6 * mu) + 1097 / 512 * e1 ** 4 * Math.sin(8 * mu);
-  const w = 1 - e2 * Math.sin(p) ** 2, D = (E - 25500000) * Math.sqrt(w) / a;
-  const lat = p - Math.tan(p) * w / (1 - e2) * D * D / 2, lon = 25 * DEG + D / Math.cos(p);
-  return [a * lon, a * Math.log(Math.tan(Math.PI / 4 + lat / 2))];
-}
 // The Helsinki City Archives' (CC BY 4.0) and the National Library's (public domain) scans in Finna, placed by control
-// points and cut into this quadtree by the pipeline (s14_oldmaps): JPEG, black outside the sheet like the city's, and
-// only down to the scan's own level.
-const FINNA_TILE = (id, L, i, j) => `data/oldmaps/${id}/${L}/${i}-${j}.jpg`;
+// points, and two Wikimedia Commons scans as Wikimaps Warper georeferenced them (public domain), cut into this quadtree
+// by the pipeline (s14_oldmaps): JPEG, black outside the sheet like the city's, and only down to the scan's own level.
+const OLDMAP_TILE = (id, L, i, j) => `data/oldmaps/${id}/${L}/${i}-${j}.jpg`;
 const GROUND_KINDS = [['map', 'Old maps'], ['photo', 'Aerial photos'], ['plan', 'Plans'], ['noise', 'Noise']];
 // The Map menu: the scale model, the city with nothing under it; the aerial view's 3D model in its place; then each
 // kind of map under the buildings.
@@ -709,12 +693,10 @@ function groundTile(src, L, i, j, load) {
   if (!t && load) {
     const s = GROUND_ROOT / 2 ** L, x = -GROUND_ROOT / 2 + i * s, z = -GROUND_ROOT / 2 + j * s;
     const e = config.origin[0] + x, n = config.origin[1] - z;  // west and north edges; WMS 1.3.0 puts northing first
-    const warper = src.startsWith('warper:'), clear = warper || src.startsWith('Melu');
+    const clear = src.startsWith('Melu');
     groundTiles.set(key, t = { mesh: null, ready: false, used: 0 });
-    const url = warper ? `${WARPER_WMS}${src.slice(7)}?service=WMS&version=1.1.1&request=GetMap&layers=image&styles=` +
-      `&srs=EPSG:3857&bbox=${[...gk25ToMerc(e, n - s), ...gk25ToMerc(e + s, n)]}&width=${GROUND_PX}&height=${GROUND_PX}` +
-      '&format=image/png&transparent=true'
-      : src.startsWith('finna:') ? FINNA_TILE(src.slice(6), L, i, j)
+    const url = src.startsWith('finna:') ? OLDMAP_TILE(src.slice(6), L, i, j)
+      : src.startsWith('warper:') ? OLDMAP_TILE(`warper.${src.slice(7)}`, L, i, j)
       : `${GROUND_WMS}?service=WMS&version=1.3.0&request=GetMap&layers=avoindata:${src}&styles=&crs=EPSG:3879` +
       `&bbox=${n - s},${e},${n},${e + s}&width=${GROUND_PX}&height=${GROUND_PX}` +
       (clear ? '&format=image/png&transparent=true' : '&format=image/jpeg&bgcolor=0x000000');
@@ -930,8 +912,8 @@ function pinStreet(name, x, y) {
 
 // ---------- War and Other ----------
 // Views of their own, each chosen from a menu in the bar (pipeline/s11_war.py, s12_other.py): one world war at a time,
-// all its sites or one kind of them; public art; the trams. Lines lie on the ground (the land front's, coloured by what
-// the survey of 1996 found of them; the tram tracks, by whether they run in the timeline's year), sites are dots
+// all its sites or one kind of them; public art; the trams; the railways and metro. Lines lie on the ground (the land
+// front's, coloured by what the survey of 1996 found of them; the tracks, by whether they run in the timeline's year), sites are dots
 // coloured by kind, each opening a card. The buildings fade and take no clicks, as in the street-name view. The dots
 // hang on the land, which the aerial view and the GPU pick leave out, and are made the first time their view opens.
 const ERAS = [...war.eras.map(E => ({ menu: 'war', ...E })), ...other.eras];
@@ -961,16 +943,18 @@ async function trenchLines(E) {
     .setAttribute('color', new THREE.BufferAttribute(color, 3)).setIndex(index);
   return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true }));
 }
-// The tram tracks, three pixels wide: each line with the years it opened and closed, drawn in use, greyed once closed
-// and left out before it opened, by the timeline's year. Redrawn when the year turns (a few thousand segments).
+// The tram, rail and metro tracks, three pixels wide: each line with the years it opened and closed, drawn in its
+// kind's colour while in use, greyed (the legend's last) once closed and left out before it opened, by the timeline's
+// year. Redrawn when the year turns (a few thousand segments).
 async function trackLines(E) {
   const [{ LineSegments2 }, { LineSegmentsGeometry }, { LineMaterial }] = await Promise.all([
     import('three/addons/lines/LineSegments2.js'), import('three/addons/lines/LineSegmentsGeometry.js'), import('three/addons/lines/LineMaterial.js')]);
   const buf = await (await fetch(`data/${E.tracks}`)).arrayBuffer();
   const [nLines] = new Uint32Array(buf, 0, 2), start = new Uint32Array(buf, 8, nLines + 1), at = 8 + 4 * (nLines + 1);
   const opened = new Int16Array(buf, at, nLines), closed = new Int16Array(buf, at + 2 * nLines, nLines);
-  const xz = new Float32Array(buf, at + 4 * nLines, 2 * start[nLines]);
-  const [on, off] = E.legend.map(g => col(g.color).toArray());
+  const kind = new Uint8Array(buf, at + 4 * nLines, nLines);
+  const xz = new Float32Array(buf, at + 4 * nLines + Math.ceil(nLines / 4) * 4, 2 * start[nLines]);
+  const cols = E.legend.map(g => col(g.color).toArray()), off = cols.at(-1);
   const lines = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ linewidth: 3, vertexColors: true }));
   lines.update = year => {
     if (Math.floor(year) === lines.year) return;
@@ -978,7 +962,7 @@ async function trackLines(E) {
     const pos = [], color = [];
     for (let l = 0; l < nLines; l++) {
       if (opened[l] > lines.year) continue;
-      const c = closed[l] && closed[l] <= lines.year ? off : on;
+      const c = closed[l] && closed[l] <= lines.year ? off : cols[kind[l]];
       for (let v = start[l]; v + 1 < start[l + 1]; v++) {
         pos.push(xz[2 * v], 0.35, xz[2 * v + 1], xz[2 * v + 2], 0.35, xz[2 * v + 3]);
         color.push(...c, ...c);

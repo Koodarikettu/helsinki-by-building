@@ -12,8 +12,8 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   aerial photos (1932–2025) can lie under the buildings, or be seen alone with the buildings hidden.
 - **What Helsinki was meant to become.** The city's master plans and their proposals from 1923 to 2016 and a
   competition entry of 1902 for Töölö on the ground, and its road traffic noise as surveyed in 2012, 2017 and 2022.
-- **Context layers.** The protection the city's plans give a building, the national heritage areas (RKY) it stands
-  in, the buildings in Wikipedia, and who lived here: the homes of well-known people whose Finnish Wikipedia article
+- **Context layers.** The protection the city's plans give a building, the protection the state gives it by law,
+  decree or agreement, the national heritage areas (RKY) it stands in, the buildings in Wikipedia, and who lived here: the homes of well-known people whose Finnish Wikipedia article
   names their Helsinki address, each with the sentence it says so in.
 - **The building's card.** Use, height, floors, structure and facade, architect and style, the Wikipedia extract,
   the City Museum's photos of it through the years, its energy label and solar potential, and why its street is so
@@ -27,8 +27,8 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   photos. The second: the anti-aircraft batteries, the bomb damage of 1939–1944 and the Defence Forces' own photos of
   the city at war (SA-kuva) at the places they name. For both, the defences in Museovirasto's register and the
   memorials, each site with a card.
-- **Other.** The city's 475 works of public art, coloured by period; the tram network of the timeline's year, with the
-  tracks closed before it in grey; the Finnish Heritage Agency's photos of Helsinki at the places they name; and the
+- **Other.** The city's 475 works of public art, coloured by period; the tram network of the timeline's year, and its
+  railways and metro, with the tracks closed before it in grey; the Finnish Heritage Agency's photos of Helsinki at the places they name; and the
   parking fines of 2014–2023, street by street and year by year, with their commonest reasons.
 - **Quests.** Find buildings from riddles and old photos, and guess their age with the colours switched off.
 
@@ -65,7 +65,7 @@ three.js city, follows theirs. The viewer in `web/` is Amsterdam's, with Helsink
 
 Screenshots of the map, which uses CC BY 4.0 data © City of Helsinki (buildings, the 3D model and its aerial meshes,
 aerial photos, old maps, master plans, noise surveys, the land front's survey, street areas and place names) and © HSY
-(solar potential), the public energy certificates of Varke's register, OpenHistoricalMap's tram tracks (CC0) and the
+(solar potential), the public energy certificates of Varke's register, OpenHistoricalMap's tracks (CC0) and the
 Helsinki Art Museum's text on Havis Amanda (CC BY 4.0). They show photos by C.A. Hårdh and Jukka Kuusisto (Helsinki
 City Museum, public domain), by Atelier Aino (Finnish Heritage Agency, Historian kuvakokoelma, CC BY 4.0) and, in the
 quest, Kaivohuone today by
@@ -79,21 +79,21 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 
 | Step | What it does |
 |---|---|
-| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram tracks, the public energy certificates, Wikidata's buildings, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna and the city's public art |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, protected buildings and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram, rail and metro tracks, the public energy certificates, Wikidata's buildings, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna and the city's public art |
 | `s01_load` | Buildings, standing and demolished → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's or the model's feature id) |
 | `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
 | `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes (the heat source among them), addresses and the city config |
 | `s04_water` | Water and land polygons |
-| `s05_layers` | Context layers: protected in the local plan, RKY areas, buildings in Wikipedia, who lived here; a bit per group per building |
+| `s05_layers` | Context layers: protected in the local plan, protected by law, decree or agreement, RKY areas, buildings in Wikipedia, who lived here; a bit per group per building |
 | `s06_wiki` | Names, architects, styles, Wikipedia extracts and Commons photos for buildings with a Wikidata item |
 | `s07_labels` | Street names placed along their street areas; why each street is so named and its former names; the street areas for the Street names view |
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 | `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
-| `s12_other` | The Other menu: public art by period, the tram tracks through time (`trams.bin`), the Heritage Agency's photos by place (`other.json`) and the parking fines by street and year (`fines.json`, loaded when the view opens) |
+| `s12_other` | The Other menu: public art by period, the tram tracks and the railways and metro through time (`trams.bin`, `rail.bin`), the Heritage Agency's photos by place (`other.json`) and the parking fines by street and year (`fines.json`, loaded when the view opens) |
 | `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`, the photos scaled in `sathumbs/`) and the war memorials (`war.json`) |
 | `s13_residents` | Well-known people at the Helsinki addresses their Finnish Wikipedia articles name, and Wikidata's links from people to buildings (`data/residents.json`, for `s05_layers`) |
-| `s14_oldmaps` | The City Archives' maps of 1902, 1907, 1910 and 1913 and the National Library's of 1860, 1880 and 1932 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`) |
+| `s14_oldmaps` | The City Archives' maps of 1902, 1907, 1910 and 1913 and the National Library's of 1860, 1880 and 1932 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`), and Wikimaps Warper's 1920 and 1935 taken from its WMS into the same tiles |
 
 ## Run it
 
@@ -144,6 +144,20 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   marks (s, SO, AO/s, plain sr and others). There is no citywide legend: the wording differs from plan to plan, so the
   card shows each building's own plan, marking and the first sentence of its regulation (in Finnish). A building in
   several plans takes the strongest marking.
+- **Protected by law, decree or agreement.** Museovirasto's register of built heritage (its WFS
+  `suojellut_rakennukset_piste`): 129 records in Helsinki at 75 sites, each with the basis of its protection, which
+  give the layer's groups: the Act on the Protection of Built Heritage (1, Rikhardinkatu 2, by the decree too), the
+  decree of 1985 on state-owned buildings (480/1985; 81), the railways' agreement of 1998 (28) and the Church Act and
+  the Act on the Orthodox Church (19). A record is linked by its VTJ-PRT; one with no identifier at all (11, three of
+  them the Parliament's) goes to the building its point stands in, unless that building has a record of its own. In five
+  records the point stands in another building than the identifier names; in two the identifier is wrong, as the
+  record's name and the city's register show, and the point's building is taken instead (`WRONG_PRT` in
+  `s05_layers.py`): Rikhardinkatu 2's record carries the identifier of the library across the street, Käpylä church's
+  that of a house at Metsolantie 11. In the other three the point is off (Fabianinkatu 15's stands in no. 13) or the
+  identifier's building is the other half of the same site (Kannelmäki church, a Pasila depot).
+  Records marked as having no identifier ("Ei PRT-tunnusta": a wall, a pier, a park) are left out, and a house the
+  register marks destroyed matches no standing building: 112 buildings. The card names the site and the building as the register does, the basis and
+  the date of the decision where it gives one, and links the register's page.
 - **RKY.** Buildings are matched by location: everything inside an area lights up, new buildings included.
 - **Wikidata.** Items are linked by the permanent building identifier (P3824 = VTJ-PRT): 4,641 items on 4,575
   buildings, 14 of them demolished. Most give a name and a completion year (which matches the register for 3,513 of 4,245 buildings; 148
@@ -258,7 +272,12 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   none); the trams, OpenHistoricalMap's tram tracks (CC0, drawn by volunteers) with the years each opened and closed
   (two short stretches with no year at all are left out),
   drawn three pixels wide (three.js's LineSegments2, vendored) in green while in use in the timeline's year and in
-  grey once closed; and the Finnish Heritage Agency's photos of Helsinki in Finna (CC BY 4.0, about 71,000), each at the
+  grey once closed; the railways and metro the same way from OpenHistoricalMap's rail and metro tracks (CC0), cut to
+  the city's land and water (the main line runs on to Riihimäki, the metro to Espoo, the ring rail in Vantaa), the
+  railways in HSL's purple of the commuter trains and the metro in its orange: 100 lines from the main line of 1862 to
+  the metro's westward line of 2017, with the harbour railways and the factories' sidings, 49 km closed by now. The
+  Vuosaari harbour railway of 2008 is not in OpenHistoricalMap, and a double track is drawn sometimes as one line,
+  sometimes as two; and the Finnish Heritage Agency's photos of Helsinki in Finna (CC BY 4.0, about 71,000), each at the
   most exact place it names: an address, a building Wikidata names, a spot in the city's place-name register (a
   square, park, island or street; not a district), or a point Finna gives other than the city's centre. Most name only
   the city or a district and are left out. One dot per place; the page carries each place's first photo, and its card
@@ -325,8 +344,10 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   and 2025. The other years cover only a strip of the city or leave holes, as measured on an overview of each layer;
   the 1800s plan is too faint to read. Eight of the maps are not the city's. 1920 and 1935 are Wikimedia Commons scans
   as [Wikimaps Warper](https://warper.wmflabs.org/) georeferenced them (its maps 1206 and 1203): they fall between the
-  city's 1917, 1925 and 1940, the years Töölö was built up. Warper's WMS serves no GK25, so each tile asks for the Web
-  Mercator box between its corners (`gk25ToMerc` in `web/app.js`). By eye on today's guide map, Töölönlahti and
+  city's 1917, 1925 and 1940, the years Töölö was built up. Warper answers in over a second a tile, so `s14_oldmaps`
+  takes its tiles once, at the level nearest each scan (1.2 m a pixel: level 7), and the map serves them itself. Its WMS
+  serves no GK25, so each tile asks for the Web Mercator box between its corners, which shifts a tile's picture by a
+  pixel at most. By eye on today's guide map, Töölönlahti and
   Töölö's streets fall where they are today on both. Warper's other Helsinki maps are left out: 1893 and 1899 are the
   series of the city's 1900, 1924 is a year off 1925, 1815, 1845 and 1929 visibly miss Töölönlahti, its small 1932
   map (1181) is drawn at too small a scale and 1946 comes in twelve sheets; three more of its maps are the National
@@ -392,8 +413,9 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
 
 ## Licence
 
-Code: MIT (see [LICENSE](LICENSE)), © Alexander Barakov and contributors. Vendored in `web/vendor/`: three.js (MIT)
-and 3d-tiles-renderer 0.5.3 (Apache 2.0, `web/vendor/3d-tiles-renderer/LICENSE`).
+Code: MIT (see [LICENSE](LICENSE)), © Alexander Barakov and contributors. Vendored in `web/vendor/`: three.js (MIT),
+3d-tiles-renderer 0.5.3 (Apache 2.0, `web/vendor/3d-tiles-renderer/LICENSE`) and the Schibsted Grotesk font, Google
+Fonts' latin and latin-ext files (SIL Open Font License 1.1, `web/vendor/fonts/OFL.txt`).
 
 Data keeps the licence of its source:
 - Buildings: City of Helsinki, [Helsingin rakennukset](https://hri.fi/data/en_GB/dataset/helsingin-rakennukset),
@@ -414,7 +436,7 @@ Data keeps the licence of its source:
   `rajapinta_suojellut:muinaisjaannos_piste` and `muu_kulttuuriperintokohde_piste`, and each site's page in the
   register (`kyppi.fi`) for its dating and description. CC BY 4.0.
 - War damage: Helsinki City Museum's photos in Finna (as for the archive photos), public domain (PDM).
-- Tram tracks: [OpenHistoricalMap](https://www.openhistoricalmap.org/), CC0.
+- Tram, rail and metro tracks: [OpenHistoricalMap](https://www.openhistoricalmap.org/), CC0.
 - Parking fines: City of Helsinki, [Pysäköintivirheet Helsingissä](https://hri.fi/data/fi/dataset/pysakointivirheet-helsingissa),
   WFS layer `Pysakointivirheet` (2023) and the yearly CSV files of 2014–2022. CC BY 4.0.
 - The city at war: SA-kuva, the Military Museum's photo archive, in [Finna](https://www.finna.fi), CC BY 4.0, which asks
@@ -425,6 +447,8 @@ Data keeps the licence of its source:
   each card credits the photographer and the collection.
 - War memorials: HAM Helsinki Art Museum's public art through the city's [Service Map](https://hri.fi/data/fi/dataset/paakaupunkiseudun-palvelukartan-rest-rajapinta)
   (`api.hel.fi/servicemap/v2`, service 767). Texts CC BY 4.0; the photos are HAM's and not used.
+- Protected by law, decree or agreement: Finnish Heritage Agency (Museovirasto), register of built heritage, WFS
+  `rajapinta_suojellut:suojellut_rakennukset_piste`, and each site's page in the register (`kyppi.fi`). CC BY 4.0.
 - RKY areas: Finnish Heritage Agency (Museovirasto), WFS `rajapinta_suojellut:rky_alue`. CC BY 4.0
   ([stated here](https://www.museovirasto.fi/fi/palvelut-ja-ohjeet/tietojarjestelmat/kulttuuriympariston-tietojarjestelmat/kulttuuriympaeristoen-paikkatietoaineistot));
   Museovirasto gives no attribution wording, so the map credits "Museovirasto, RKY, CC BY 4.0".
@@ -447,7 +471,7 @@ Data keeps the licence of its source:
   layers `avoindata:Ortoilmakuva_*` and the others named in `web/app.js`, streamed from the city's map server. CC BY 4.0.
 - Old maps of 1920 and 1935: Wikimedia Commons, [Pharus-asemakaava Helsinki](https://commons.wikimedia.org/wiki/File:Pharus-asemakaava_Helsinki.jpg)
   (dated 1920 on Commons; public domain) and [Map of Helsinki-Helsingfors 1935](https://commons.wikimedia.org/wiki/File:Map_of_Helsinki-Helsingfors_1935.jpeg)
-  (CC0), georeferenced in [Wikimaps Warper](https://warper.wmflabs.org/) and streamed from its WMS.
+  (CC0), georeferenced in [Wikimaps Warper](https://warper.wmflabs.org/), taken from its WMS and tiled by the pipeline.
 - Old maps of 1902, 1907, 1910 and 1913: Helsinki City Archives (Helsingin kaupunginarkisto) via
   [Finna](https://www.finna.fi),
   [Plan öfver Helsingfors stad och dess ägor](https://www.finna.fi/Record/hka.139878320783000_141269050299300) (1907),

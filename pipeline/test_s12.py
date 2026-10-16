@@ -1,7 +1,12 @@
-"""Self-check for placing the Heritage Agency's photos: uv run python -m pipeline.test_s12"""
+"""Self-check for placing the Heritage Agency's photos, the parking fines and the tracks: uv run python -m pipeline.test_s12"""
+import tempfile
+from pathlib import Path
+
+import numpy as np
 from shapely.geometry import Point
 
-from .s12_other import place_of, reason, street_key, street_of
+from .s03_tiles import ORIGIN
+from .s12_other import place_of, reason, street_key, street_of, write_tracks
 
 addr = {"unioninkatu 30": (1.0, 2.0)}
 named = {"säätytalo": Point(3, 4)}
@@ -34,4 +39,18 @@ assert street_key("Tarkk'ampujankatu") == street_key("Tarkk'Ampujankatu") and st
 assert street_key("Castréninkatu") == street_key("Castreninkatu") and street_key("Mäkitie") != street_key("Makitie")
 assert street_of("Fredrikinkatu 12 A") == "Fredrikinkatu" and street_of("Tilkantori (tori tai aukio)") == "Tilkantori"
 assert street_of("Kauppatori") == "Kauppatori" and street_of(None) == ""
+# the tracks file reads as web/app.js trackLines reads it: three lines, so the kinds are padded to four bytes
+with tempfile.TemporaryDirectory() as d:
+    f = Path(d) / "t.bin"
+    line = lambda n: np.array(ORIGIN) + np.arange(2 * n).reshape(n, 2)
+    write_tracks(f, [(line(2), 1862, 0, 0), (line(3), 1895, 2011, 0), (line(2), 1982, 0, 1)])
+    buf = f.read_bytes()
+    n, nv = map(int, np.frombuffer(buf, "<u4", 2))
+    start = np.frombuffer(buf, "<u4", n + 1, 8)
+    at = 8 + 4 * (n + 1)
+    assert (n, nv, list(start)) == (3, 7, [0, 2, 5, 7])
+    assert list(np.frombuffer(buf, "<i2", n, at)) == [1862, 1895, 1982] and list(np.frombuffer(buf, "<i2", n, at + 2 * n)) == [0, 2011, 0]
+    assert list(np.frombuffer(buf, "u1", n, at + 4 * n)) == [0, 0, 1]
+    xz = np.frombuffer(buf, "<f4", 2 * nv, at + 4 * n + -(-n // 4) * 4)
+    assert len(buf) == at + 4 * n + 4 + 8 * nv and np.allclose(xz[:2], [0, -1])  # the first point, a metre north of Senaatintori
 print("ok")

@@ -1,7 +1,8 @@
 """Download the open data into data/raw/: Helsinki's WFS layers, the heights of its 3D city model and the buildings
 it records as demolished, Museovirasto's RKY areas, HSY's solar potential, the public energy certificates, Wikidata's
 buildings, the Helsinki City Museum's photos in Finna, the land front of 1914–1918, Museovirasto's register of
-ancient and historic remains, the city's public art and its parking fines.
+ancient and historic remains and its protected buildings, the city's public art and its parking fines, and
+OpenHistoricalMap's tram, rail and metro tracks.
 
 Each WFS layer comes whole in one GetFeature request (no paging); the check below fails if a server ever caps it.
 Licences: see README.
@@ -35,6 +36,8 @@ LAYERS = [  # (server, layer, extra parameters); saved as data/raw/<layer name>.
     (MV, "rajapinta_suojellut:muinaisjaannos_piste", MV_HELSINKI),   # ancient and historic remains
     (MV, "rajapinta_suojellut:muu_kulttuuriperintokohde_piste", MV_HELSINKI),  # other heritage sites
     (MV, "rajapinta_suojellut:rky_alue", NATIONAL),                  # RKY areas
+    (MV, "rajapinta_suojellut:suojellut_rakennukset_piste", NATIONAL),  # protected by law, decree or agreement; its
+                                                                     # field is Kunta, padded: s05_layers picks Helsinki
     (HSY, "ilmasto_ja_energia:rakennukset_aurinkosahkopotentiaali", NATIONAL),  # solar potential by building, 2015
 ]
 # Public art in Helsinki, from the city's Service Map (service 767; texts CC BY 4.0, photos HAM's own): war memorials.
@@ -211,16 +214,18 @@ def fetch_wfs(out: Path, server: str, layer: str, extra: dict):
     print(name, n)
 
 
-# Helsinki's tram tracks through time from OpenHistoricalMap (CC0): each way with the years it opened and closed.
+# Helsinki's tram tracks, and its railways and metro, through time from OpenHistoricalMap (CC0): each way with the years
+# it opened and closed. The box takes in some of Espoo and Vantaa too; s12_other cuts the railways to Helsinki.
 OHM = "https://overpass-api.openhistoricalmap.org/api/interpreter"
 TRAMS = '[out:json][timeout:120];way["railway"="tram"](60.10,24.78,60.32,25.26);out tags geom;'
+RAIL = '[out:json][timeout:120];way["railway"~"^(rail|narrow_gauge|subway)$"](60.10,24.78,60.32,25.26);out tags geom;'
 
 
-def fetch_trams(out: Path):
-    r = requests.post(OHM, data={"data": TRAMS}, headers=UA, timeout=300)
+def fetch_ohm(out: Path, query: str):
+    r = requests.post(OHM, data={"data": query}, headers=UA, timeout=300)
     r.raise_for_status()
     out.write_bytes(r.content)
-    print("tram ways", len(r.json()["elements"]))
+    print(out.stem, "ways", len(r.json()["elements"]))
 
 
 # The register's own page for each defence site (other than the land front's strongpoints, which the city's survey
@@ -286,7 +291,8 @@ def main():
     fetch_finna(out / "finna_sa.jsonl", FINNA_SA_PARAMS)
     fetch_public_art(out / "public_art.json")
     fetch_register(out)
-    fetch_trams(out / "ohm_trams.json")
+    fetch_ohm(out / "ohm_trams.json", TRAMS)
+    fetch_ohm(out / "ohm_rail.json", RAIL)
     fetch_fines(out / "fines")
 
 

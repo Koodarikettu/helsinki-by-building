@@ -4,6 +4,7 @@
   dot coloured by the period of its year, with the periods of the buildings.
 - Trams: Helsinki's tram tracks through time from OpenHistoricalMap (CC0), each with the years it opened and closed;
   the map shows the network of the timeline's year and greys the tracks closed before it (trams.bin).
+- Railways and metro: the same from OpenHistoricalMap's rail and metro tracks, cut to the city (rail.bin).
 - The Finnish Heritage Agency's photos of Helsinki in Finna (CC BY 4.0), each at the place it names, the most exact
   that can be found: an address; a building that Wikidata names ("Säätytalo"); a square, park, island or street in
   the city's place-name register ("Senaatintori Helsinki"); or a point Finna gives other than the city's centre. A
@@ -11,9 +12,10 @@
 - Parking fines: the city's parking fines and notices of 2014–2023 (Pysäköintivirheet Helsingissä, CC BY 4.0), by the
   street of their address, for the streets of the street-name view to be coloured by them year by year.
 
-Writes web/data/other.json, web/data/fines.json (the parking fines by street and year) and web/data/trams.bin:
-  u32 nLines, u32 nVerts, u32 start[nLines + 1], i16 opened[nLines], i16 closed[nLines] (0: never, or not known;
-  padded to 4), f32 xz[2 * nVerts] (local frame).
+Writes web/data/other.json, web/data/fines.json (the parking fines by street and year), web/data/trams.bin and
+web/data/rail.bin:
+  u32 nLines, u32 nVerts, u32 start[nLines + 1], i16 opened[nLines], i16 closed[nLines] (0: never, or not known),
+  u8 kind[nLines] (its colour in the view's legend; padded to 4), f32 xz[2 * nVerts] (local frame).
 """
 import csv
 import json
@@ -25,6 +27,7 @@ from pathlib import Path
 import geopandas as gpd
 
 import numpy as np
+import shapely
 from pyproj import Transformer
 
 from .periods import PERIODS, period_index
@@ -52,6 +55,10 @@ COARSE = {"helsinki", "suomi", "vantaa", "espoo", "helsingin maalaiskunta", "hel
 ISLANDS = {"suomenlinna", "santahamina"}
 OHM = dict(label="OpenHistoricalMap, Helsinki's tram tracks", label_fi="OpenHistoricalMap, Helsingin raitiotiet",
            url="https://www.openhistoricalmap.org/", licence="CC0")
+# The railways in HSL's colour of the commuter trains, the metro in its own orange; closed by then, as the trams'
+RAIL_COLORS = ("#8c4799", "#ff6319", "#b9bfc2")
+OHM_RAIL = dict(label="OpenHistoricalMap, Helsinki's railways and metro", label_fi="OpenHistoricalMap, Helsingin rautatiet ja metro",
+                url="https://www.openhistoricalmap.org/", licence="CC0")
 FINES = dict(label="City of Helsinki, parking violations", label_fi="Helsingin kaupunki, pysäköintivirheet",
              url="https://hri.fi/data/en_GB/dataset/pysakointivirheet-helsingissa",
              url_fi="https://hri.fi/data/fi/dataset/pysakointivirheet-helsingissa", licence="CC BY 4.0")
@@ -97,20 +104,29 @@ def art() -> dict:
         kinds=out)
 
 
-def trams() -> dict:
-    # a way with no opening year cannot be placed in time (two short stretches in Kallio and Munkkiniemi): left out
-    ways = [w for w in json.loads((RAW / "ohm_trams.json").read_text())["elements"] if w["tags"].get("start_date", "")[:4].isdigit()]
+def ohm_ways(name: str) -> list:
+    """OpenHistoricalMap's ways in GK25: [(coordinates (n, 2), opened, closed or 0, tags)]. A way with no opening year
+    cannot be placed in time (two short tram stretches in Kallio and Munkkiniemi): left out."""
     gk25 = Transformer.from_crs(4326, 3879, always_xy=True)
     year = lambda s: int(s[:4]) if s and s[:4].isdigit() else 0
-    coords = [np.array(gk25.transform([p["lon"] for p in w["geometry"]], [p["lat"] for p in w["geometry"]])).T for w in ways]
-    opened = np.array([year(w["tags"].get("start_date")) for w in ways], "<i2")
-    closed = np.array([year(w["tags"].get("end_date")) for w in ways], "<i2")
-    start = np.cumsum([0] + [len(c) for c in coords]).astype("<u4")
-    xz = to_local(np.concatenate(coords)).astype("<f4")
-    years = opened.tobytes() + closed.tobytes()
-    (OUT / "trams.bin").write_bytes(np.array([len(ways), len(xz)], "<u4").tobytes() + start.tobytes() + years +
-                                    bytes(-len(years) % 4) + xz.tobytes())
-    length = np.array([np.hypot(*np.diff(c, axis=0).T).sum() for c in coords]) / 1000
+    return [(np.array(gk25.transform([p["lon"] for p in w["geometry"]], [p["lat"] for p in w["geometry"]])).T,
+             year(w["tags"].get("start_date")), year(w["tags"].get("end_date")), w["tags"])
+            for w in json.loads((RAW / name).read_text())["elements"] if year(w["tags"].get("start_date"))]
+
+
+def write_tracks(path: Path, lines: list):
+    """[(coordinates in GK25, opened, closed, kind)] → a tracks file (above); their opened, closed, kind and km."""
+    opened, closed = (np.array([l[k] for l in lines], "<i2") for k in (1, 2))
+    kind = np.array([l[3] for l in lines], "u1")
+    start = np.cumsum([0] + [len(l[0]) for l in lines]).astype("<u4")
+    xz = to_local(np.concatenate([l[0] for l in lines])).astype("<f4")
+    path.write_bytes(np.array([len(lines), len(xz)], "<u4").tobytes() + start.tobytes() + opened.tobytes() +
+                             closed.tobytes() + kind.tobytes() + bytes(-len(kind) % 4) + xz.tobytes())
+    return opened, closed, kind, np.array([np.hypot(*np.diff(l[0], axis=0).T).sum() for l in lines]) / 1000
+
+
+def trams() -> dict:
+    opened, closed, _, length = write_tracks(OUT / "trams.bin", [(c, o, x, 0) for c, o, x, _ in ohm_ways("ohm_trams.json")])
     first = int(opened[opened > 0].min())
     return dict(
         id="trams", menu="other", label="Trams", label_fi="Raitiotiet", years=f"{first}–", years_fi=f"{first}–",
@@ -128,6 +144,41 @@ def trams() -> dict:
                 dict(color=TRAM_COLORS[1], label="Closed before it", label_fi="Lakkautettu sitä ennen")],
         kinds=[dict(id="tracks", label="Tram tracks", label_fi="Raitiotiet", color=TRAM_COLORS[0], menu=False, list=False,
                     source=OHM, sites=[])])
+
+
+def rail() -> dict:
+    # Cut to the city, land and water: the main line runs on to Riihimäki, the metro to Espoo, the ring rail in Vantaa.
+    city = shapely.union_all([g for n in ("manner", "saaret", "merialue", "muut_vesialueet")
+                              for g in gpd.read_file(RAW / f"Maavesi_{n}.geojson").geometry])
+    lines = []
+    for c, o, x, tags in ohm_ways("ohm_rail.json"):
+        cut = shapely.LineString(c).intersection(city)
+        lines += [(np.asarray(g.coords)[:, :2], o, x, int(tags["railway"] == "subway"))
+                  for g in getattr(cut, "geoms", [cut]) if g.geom_type == "LineString" and not g.is_empty]
+    opened, closed, kind, length = write_tracks(OUT / "rail.bin", lines)
+    first, metro = int(opened.min()), int(opened[kind == 1].min())
+    return dict(
+        id="rail", menu="other", label="Railways and metro", label_fi="Rautatiet ja metro", years=f"{first}–", years_fi=f"{first}–",
+        text=("Helsinki's railways and metro through time as OpenHistoricalMap draws them within the city: the map shows "
+              "the tracks in use in the timeline's year, the railways in purple and the metro in orange, and greys those "
+              f"closed before it ({length[closed > 0].sum():.0f} km in all, the harbour railways and factory sidings among "
+              f"them). The main line came in {first}, the metro in {metro}. Drag the timeline or play it to watch the "
+              "network grow."),
+        text_fi=("Helsingin rautatiet ja metro ajan mukana OpenHistoricalMapin mukaan kaupungin rajojen sisällä: kartta "
+                 "näyttää aikajanan vuonna käytössä olevat radat, rautatiet violettina ja metron oranssina, ja harmaana "
+                 f"sitä ennen lakkautetut (kaikkiaan {length[closed > 0].sum():.0f} km, muun muassa satamaradat ja tehtaiden "
+                 f"pistoraiteet). Päärata valmistui {first}, metro {metro}. Vedä aikajanaa tai toista se, niin näet verkon "
+                 "kasvavan."),
+        caveat=("OpenHistoricalMap is drawn by volunteers: a track's years may be rounded, and some tracks are missing, "
+                "such as the Vuosaari harbour railway of 2008. A double track is sometimes one line, sometimes two."),
+        caveat_fi=("OpenHistoricalMapia piirtävät vapaaehtoiset: radan vuodet voivat olla pyöristettyjä, ja ratoja puuttuu, "
+                   "esimerkiksi Vuosaaren satamarata vuodelta 2008. Kaksoisraide on joskus yksi viiva, joskus kaksi."),
+        tracks="rail.bin", linesTitle="Tracks", linesTitle_fi="Radat",
+        legend=[dict(color=RAIL_COLORS[0], label="Railway in use in the timeline's year", label_fi="Rautatie käytössä aikajanan vuonna"),
+                dict(color=RAIL_COLORS[1], label="Metro in use in the timeline's year", label_fi="Metro käytössä aikajanan vuonna"),
+                dict(color=RAIL_COLORS[2], label="Closed before it", label_fi="Lakkautettu sitä ennen")],
+        kinds=[dict(id="tracks", label="Railways and metro", label_fi="Rautatiet ja metro", color=RAIL_COLORS[0], menu=False,
+                    list=False, source=OHM_RAIL, sites=[])])
 
 
 def place_of(r: dict, addr: dict, named: dict, spot: dict, gk25=None, box=None, areas=frozenset()):
@@ -341,7 +392,7 @@ def fines() -> dict:
 
 
 def main():
-    eras = [art(), trams(), mv_photos(), fines()]
+    eras = [art(), trams(), rail(), mv_photos(), fines()]
     (OUT / "other.json").write_text(json.dumps(dict(eras=eras), ensure_ascii=False, separators=(",", ":")))
     for e in eras:
         print(e["id"], {k["id"]: len(k["sites"]) for k in e["kinds"]})

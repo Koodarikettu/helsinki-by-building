@@ -84,6 +84,65 @@ def protected():
     return out
 
 
+# The register's bases of protection, as it words them, with their group; a building on two takes the first.
+STATUTES = {"Laki rakennusperinnön suojelemisesta": "act", "Asetus 480/85": "decree", "Rautatiesopimus 1998": "railway",
+            "Kirkkolaki": "church", "Laki ortodoksisesta kirkosta": "church"}
+STATUTE_GROUPS = ["act", "decree", "railway", "church"]
+# Two records whose identifier names another building than the record does, where the record's name and its point agree
+# with the city's register: Rikhardinkatu 2's (site 200171) carries the library's at Rikhardinkatu 3, Käpylä church's
+# (200926) that of a house at Metsolantie 11; their points stand in Rikhardinkatu 2 and in the church at Metsolantie 14.
+# (Fabianinkatu 15's point stands in no. 13, but its identifier is no. 15's: kept.)
+WRONG_PRT = {(200171, "1030462397"): "1030462652", (200926, "103334265C"): "1033342541"}
+
+
+@layer(
+    id="statutory", section="Heritage", section_fi="Rakennusperintö", era="", era_fi="",
+    title="Protected by law, decree or agreement", title_fi="Suojeltu lailla, asetuksella tai sopimuksella",
+    text=("Buildings the state protects, as the Finnish Heritage Agency's register of protected buildings lists them: "
+          "by the Act on the Protection of Built Heritage, by the decree of 1985 on protecting state-owned buildings "
+          "(480/1985), by the agreement of 1998 on the state railways' buildings, or as churches by the Church Act or "
+          "the Act on the Orthodox Church. The card names the site and the building and links to the register."),
+    text_fi=("Valtion suojelemat rakennukset Museoviraston rakennusperintörekisterin mukaan: laki rakennusperinnön "
+             "suojelemisesta, asetus valtion omistamien rakennusten suojelemisesta (480/1985), vuoden 1998 sopimus "
+             "rautateiden rakennusten suojelusta sekä kirkkolaki ja laki ortodoksisesta kirkosta. Kortti kertoo kohteen "
+             "ja rakennuksen nimen ja linkittää rekisteriin."),
+    caveat=("Linked by the permanent building identifier; a record with none goes to the building it stands in. "
+            "Walls, piers and parks of the register are left out."),
+    caveat_fi=("Liitetty pysyvällä rakennustunnuksella; tunnuksettomat merkinnät sen rakennuksen mukaan, jonka sisällä "
+               "ne ovat. Rekisterin muurit, laiturit ja puistot puuttuvat."),
+    source=("Finnish Heritage Agency, register of built heritage", "Museovirasto, rakennusperintörekisteri",
+            "https://www.kyppi.fi/palveluikkuna/rapea/"),
+    groups=[("act", "Act on built heritage", "Rakennusperintölaki"),
+            ("decree", "State-owned, decree 480/1985", "Valtion rakennus, asetus 480/1985"),
+            ("railway", "Railway agreement 1998", "Rautatiesopimus 1998"),
+            ("church", "Church Act", "Kirkkolaki")],
+)
+def statutory():
+    s = gpd.read_file("data/raw/suojellut_rakennukset_piste.geojson")
+    s = s[s.Kunta.fillna("").str.strip() == "Helsinki"]  # the box takes in a corner of Vantaa
+    s["bases"] = s["suojeluryhmä"].fillna("").map(lambda v: [x.strip() for x in v.split(",") if x.strip()])
+    s["group"] = s.bases.map(lambda bs: min((STATUTES[x] for x in bs), key=STATUTE_GROUPS.index))  # KeyError: a new basis
+    prt = s.vtj_prt.fillna("").str.strip()
+    prt = pd.Series([WRONG_PRT.get((k, p), p) for k, p in zip(s.KOHDEID, prt)], index=s.index)
+    b = buildings()
+    # "Ei PRT-tunnusta" marks a wall, a pier or a park; a record with no identifier at all is a building the register
+    # has not linked (three of the Parliament's), and goes to the building it stands in, unless that has its own record.
+    own = s[prt.isin(set(b.key))].assign(key=prt)
+    loose = gpd.sjoin(s[prt == ""].to_crs(b.crs), b[["key", "geometry"]], predicate="within")
+    hits = pd.concat([own, loose[~loose.key.isin(own.key)]])
+    hits = hits.assign(rank=hits.group.map(STATUTE_GROUPS.index)).sort_values("rank").drop_duplicates("key")
+    out = {}
+    for r in hits.itertuples():
+        site, name = r.kohdenimi.strip(), (r.rakennusnimi or "").strip()
+        where = f"{site}: {name}" if name and name != site else site
+        when = pd.to_datetime(r.SuojeluPäätöspvm) if pd.notna(r.SuojeluPäätöspvm) else None
+        basis = "; ".join(r.bases)
+        out[r.key] = (r.group, dict(story=f"{where}. {basis}" + (f", decided {when:%-d %B %Y}." if when else "."),
+                                    story_fi=f"{where}. {basis}" + (f", päätös {when:%-d.%-m.%Y}." if when else "."),
+                                    source=r.url.strip()))
+    return out
+
+
 @layer(
     id="rky", section="Heritage", section_fi="Rakennusperintö", era="", era_fi="",
     title="Built heritage of national significance (RKY)",
