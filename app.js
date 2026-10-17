@@ -981,7 +981,7 @@ async function buildEra(E) {
   for (const K of E.kinds) {
     K.obj = new THREE.Group();
     flat.add(K.obj);
-    const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(K.sites.flatMap(s => [s.at[0], 1, s.at[1]]), 3));
+    const g = K.geo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(K.sites.flatMap(s => [s.at[0], 1, s.at[1]]), 3));
     // A white ring under each dot, so it reads on any map; on top of the buildings, so none hides behind one.
     const dots = (px, order, color) => Object.assign(new THREE.Points(g, new THREE.PointsMaterial({ size: px * renderer.getPixelRatio(),
       sizeAttenuation: false, map: DOT, alphaTest: 0.5, depthTest: false, color })), { renderOrder: order });
@@ -1101,9 +1101,15 @@ const viewNow = () => viewOn && !photoOn ? ERAS[viewEra] : null;
 const fineView = () => viewNow()?.streets ? viewNow() : null;
 const viewKinds = E => E.kinds.filter(K => !viewKind || (K.group || K.id) === viewKind);  // a kind, or a group of them
 const viewShown = () => viewNow() ? viewKinds(viewNow()) : [];
+// A site with a year of its own (a station, from its opening) shows from that year on; such sites come oldest first.
+const notYet = s => s.from > uniforms.uYear.value;
 function showView() {
   const shown = viewShown();
   viewNow()?.trackLines?.update(uniforms.uYear.value);
+  for (const K of shown) if (K.geo && K.sites[0]?.from) {
+    const n = K.sites.findIndex(notYet);
+    K.geo.setDrawRange(0, n < 0 ? K.sites.length : n);
+  }
   if (viewNow()?.streets) colourFines(viewNow());
   for (const E of ERAS) for (const K of E.kinds) if (K.obj) K.obj.visible = shown.includes(K);
   if (pinnedSite && !shown.includes(pinnedSite.kind)) pinCard(-1);  // its war or kind is no longer shown
@@ -1151,6 +1157,7 @@ const sv = new THREE.Vector3();
 function pickSite(x, y) {
   let best = null, bd = 12 ** 2;
   for (const s of viewShown().flatMap(K => K.sites)) {
+    if (notYet(s)) continue;
     sv.set(s.at[0], 1, s.at[1]).project(camera);
     if (sv.z > 1) continue;
     const d = ((sv.x + 1) / 2 * canvas.clientWidth - x) ** 2 + ((1 - sv.y) / 2 * canvas.clientHeight - y) ** 2;
