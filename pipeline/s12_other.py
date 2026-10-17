@@ -4,7 +4,8 @@
   dot coloured by the period of its year, with the periods of the buildings.
 - Trams: Helsinki's tram tracks through time from OpenHistoricalMap (CC0), each with the years it opened and closed;
   the map shows the network of the timeline's year and greys the tracks closed before it (trams.bin).
-- Railways and metro: the same from OpenHistoricalMap's rail and metro tracks, cut to the city (rail.bin).
+- Railways and metro: the same from OpenHistoricalMap's rail and metro tracks, cut to the city (rail.bin), and
+  Wikidata's stations in the city as dots from the year of their official opening.
 - The Finnish Heritage Agency's photos of Helsinki in Finna (CC BY 4.0), each at the place it names, the most exact
   that can be found: an address; a building that Wikidata names ("Säätytalo"); a square, park, island or street in
   the city's place-name register ("Senaatintori Helsinki"); or a point Finna gives other than the city's centre. A
@@ -59,6 +60,31 @@ OHM = dict(label="OpenHistoricalMap, Helsinki's tram tracks", label_fi="OpenHist
 RAIL_COLORS = ("#8c4799", "#ff6319", "#b9bfc2")
 OHM_RAIL = dict(label="OpenHistoricalMap, Helsinki's railways and metro", label_fi="OpenHistoricalMap, Helsingin rautatiet ja metro",
                 url="https://www.openhistoricalmap.org/", licence="CC0")
+WD_STATIONS = dict(label="Wikidata, stations and their opening dates", label_fi="Wikidata, asemat ja niiden avauspäivät",
+                   url="https://www.wikidata.org/", licence="CC0")
+METRO_STATION = "http://www.wikidata.org/entity/Q928830"
+
+
+def stations(city) -> tuple:
+    """Wikidata's railway and metro stations in the city, each from the year of its official opening, oldest first. One
+    with no opening date cannot be placed in time (the Malmi cemetery's office, Kivihaka): left out."""
+    gk25 = Transformer.from_crs(4326, 3879, always_xy=True)
+    seen, out = {}, ([], [])
+    with open(RAW / "wd_stations.csv", newline="") as f:
+        for r in csv.DictReader(f):  # a row per class, label and point: the first of an item is kept, metro if any is
+            if not r["open"][:4].isdigit():
+                continue
+            if r["i"] in seen:
+                seen[r["i"]]["metro"] |= r["t"] == METRO_STATION
+                continue
+            x, y = gk25.transform(*map(float, r["coord"][len("Point("):-1].split()))
+            if city.contains(shapely.Point(x, y)):
+                year, fi = int(r["open"][:4]), r["fi"] or r["en"]
+                seen[r["i"]] = dict(metro=r["t"] == METRO_STATION, site={"at": at(x, y), "name": r["en"] or fi, "name_fi": fi,
+                                    "sub": f"Opened {year}", "sub_fi": f"Avattu {year}", "url": r["i"], "from": year})
+    for s in seen.values():
+        out[s["metro"]].append(s["site"])
+    return tuple(sorted(k, key=lambda s: (s["from"], s["name_fi"])) for k in out)
 FINES = dict(label="City of Helsinki, parking violations", label_fi="Helsingin kaupunki, pysäköintivirheet",
              url="https://hri.fi/data/en_GB/dataset/pysakointivirheet-helsingissa",
              url_fi="https://hri.fi/data/fi/dataset/pysakointivirheet-helsingissa", licence="CC BY 4.0")
@@ -157,28 +183,37 @@ def rail() -> dict:
                   for g in getattr(cut, "geoms", [cut]) if g.geom_type == "LineString" and not g.is_empty]
     opened, closed, kind, length = write_tracks(OUT / "rail.bin", lines)
     first, metro = int(opened.min()), int(opened[kind == 1].min())
+    railway_stations, metro_stations = stations(city)
     return dict(
         id="rail", menu="other", label="Railways and metro", label_fi="Rautatiet ja metro", years=f"{first}–", years_fi=f"{first}–",
         text=("Helsinki's railways and metro through time as OpenHistoricalMap draws them within the city: the map shows "
               "the tracks in use in the timeline's year, the railways in purple and the metro in orange, and greys those "
               f"closed before it ({length[closed > 0].sum():.0f} km in all, the harbour railways and factory sidings among "
-              f"them). The main line came in {first}, the metro in {metro}. Drag the timeline or play it to watch the "
-              "network grow."),
+              f"them). The main line came in {first}, the metro in {metro}. The dots are the stations, each from the "
+              "year Wikidata gives for its opening. Drag the timeline or play it to watch the network grow."),
         text_fi=("Helsingin rautatiet ja metro ajan mukana OpenHistoricalMapin mukaan kaupungin rajojen sisällä: kartta "
                  "näyttää aikajanan vuonna käytössä olevat radat, rautatiet violettina ja metron oranssina, ja harmaana "
                  f"sitä ennen lakkautetut (kaikkiaan {length[closed > 0].sum():.0f} km, muun muassa satamaradat ja tehtaiden "
-                 f"pistoraiteet). Päärata valmistui {first}, metro {metro}. Vedä aikajanaa tai toista se, niin näet verkon "
-                 "kasvavan."),
+                 f"pistoraiteet). Päärata valmistui {first}, metro {metro}. Pisteet ovat asemat, kukin siitä vuodesta, jona "
+                 "se Wikidatan mukaan avattiin. Vedä aikajanaa tai toista se, niin näet verkon kasvavan."),
         caveat=("OpenHistoricalMap is drawn by volunteers: a track's years may be rounded, and some tracks are missing, "
-                "such as the Vuosaari harbour railway of 2008. A double track is sometimes one line, sometimes two."),
+                "such as the Vuosaari harbour railway of 2008 (its station is there). A double track is sometimes one "
+                "line, sometimes two. Wikidata has no item for Tapulikaupunki's station and no stations closed since; "
+                "a station keeps its name of today."),
         caveat_fi=("OpenHistoricalMapia piirtävät vapaaehtoiset: radan vuodet voivat olla pyöristettyjä, ja ratoja puuttuu, "
-                   "esimerkiksi Vuosaaren satamarata vuodelta 2008. Kaksoisraide on joskus yksi viiva, joskus kaksi."),
+                   "esimerkiksi Vuosaaren satamarata vuodelta 2008 (sen asema on mukana). Kaksoisraide on joskus yksi viiva, "
+                   "joskus kaksi. Wikidatassa ei ole Tapulikaupungin asemaa eikä sittemmin lakkautettuja asemia, ja asema on "
+                   "nykyisellä nimellään."),
         tracks="rail.bin", linesTitle="Tracks", linesTitle_fi="Radat",
         legend=[dict(color=RAIL_COLORS[0], label="Railway in use in the timeline's year", label_fi="Rautatie käytössä aikajanan vuonna"),
                 dict(color=RAIL_COLORS[1], label="Metro in use in the timeline's year", label_fi="Metro käytössä aikajanan vuonna"),
                 dict(color=RAIL_COLORS[2], label="Closed before it", label_fi="Lakkautettu sitä ennen")],
         kinds=[dict(id="tracks", label="Railways and metro", label_fi="Rautatiet ja metro", color=RAIL_COLORS[0], menu=False,
-                    list=False, source=OHM_RAIL, sites=[])])
+                    list=False, source=OHM_RAIL, sites=[]),
+               dict(id="stations", label="Railway stations", label_fi="Rautatieasemat", color=RAIL_COLORS[0], menu=False,
+                    list=True, source=WD_STATIONS, sites=railway_stations),
+               dict(id="metro", label="Metro stations", label_fi="Metroasemat", color=RAIL_COLORS[1], menu=False,
+                    list=True, source=WD_STATIONS, sites=metro_stations)])
 
 
 def place_of(r: dict, addr: dict, named: dict, spot: dict, gk25=None, box=None, areas=frozenset()):

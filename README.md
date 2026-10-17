@@ -28,7 +28,7 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   the city at war (SA-kuva) at the places they name. For both, the defences in Museovirasto's register and the
   memorials, each site with a card.
 - **Other.** The city's 475 works of public art, coloured by period; the tram network of the timeline's year, and its
-  railways and metro, with the tracks closed before it in grey; the Finnish Heritage Agency's photos of Helsinki at the places they name; and the
+  railways and metro with their stations, with the tracks closed before it in grey; the Finnish Heritage Agency's photos of Helsinki at the places they name; and the
   parking fines of 2014–2023, street by street and year by year, with their commonest reasons.
 - **Quests.** Find buildings from riddles and old photos, and guess their age with the colours switched off.
 
@@ -79,7 +79,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 
 | Step | What it does |
 |---|---|
-| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, protected buildings and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram, rail and metro tracks, the public energy certificates, Wikidata's buildings, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna and the city's public art |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, protected buildings and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram, rail and metro tracks, the public energy certificates, Wikidata's buildings and stations, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna and the city's public art |
 | `s01_load` | Buildings, standing and demolished → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's or the model's feature id) |
 | `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
 | `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes (the heat source among them), addresses and the city config |
@@ -90,7 +90,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 | `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
-| `s12_other` | The Other menu: public art by period, the tram tracks and the railways and metro through time (`trams.bin`, `rail.bin`), the Heritage Agency's photos by place (`other.json`) and the parking fines by street and year (`fines.json`, loaded when the view opens) |
+| `s12_other` | The Other menu: public art by period, the tram tracks and the railways and metro through time (`trams.bin`, `rail.bin`) with the stations by their opening, the Heritage Agency's photos by place (`other.json`) and the parking fines by street and year (`fines.json`, loaded when the view opens) |
 | `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`, the photos scaled in `sathumbs/`) and the war memorials (`war.json`) |
 | `s13_residents` | Well-known people at the Helsinki addresses their Finnish Wikipedia articles name, and Wikidata's links from people to buildings (`data/residents.json`, for `s05_layers`) |
 | `s14_oldmaps` | The City Archives' maps of 1902, 1907, 1910 and 1913 and the National Library's of 1860, 1880 and 1932 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`), and Wikimaps Warper's 1920 and 1935 taken from its WMS into the same tiles |
@@ -277,7 +277,13 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   railways in HSL's purple of the commuter trains and the metro in its orange: 100 lines from the main line of 1862 to
   the metro's westward line of 2017, with the harbour railways and the factories' sidings, 49 km closed by now. The
   Vuosaari harbour railway of 2008 is not in OpenHistoricalMap, and a double track is drawn sometimes as one line,
-  sometimes as two; and the Finnish Heritage Agency's photos of Helsinki in Finna (CC BY 4.0, about 71,000), each at the
+  sometimes as two. The stations are Wikidata's (CC0) railway and metro stations in the city's land and water, each a
+  dot from the year of its official opening (P1619): 17 railway stations from the Central Station and Pasila of 1862
+  to the car-carrier station of 2012 (the Vuosaari harbour's of 2008 among them) and the 19 metro stations from 1982
+  to 2017. Two with no opening date are left out (the Malmi cemetery's office, Kivihaka), Tapulikaupunki's station has
+  no item, and Wikidata has no stations closed since; a station is named as it is today (Helsingin yliopisto opened as
+  Kaisaniemi). OpenHistoricalMap's own stations are only the metro's, and some of their years are off (Itäkeskus 1986,
+  the terminus of 1982; Kaisaniemi "closed" in 2015, when it was renamed); and the Finnish Heritage Agency's photos of Helsinki in Finna (CC BY 4.0, about 71,000), each at the
   most exact place it names: an address, a building Wikidata names, a spot in the city's place-name register (a
   square, park, island or street; not a district), or a point Finna gives other than the city's centre. Most name only
   the city or a district and are left out. One dot per place; the page carries each place's first photo, and its card

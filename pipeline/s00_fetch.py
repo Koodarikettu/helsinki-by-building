@@ -2,7 +2,7 @@
 it records as demolished, Museovirasto's RKY areas, HSY's solar potential, the public energy certificates, Wikidata's
 buildings, the Helsinki City Museum's photos in Finna, the land front of 1914–1918, Museovirasto's register of
 ancient and historic remains and its protected buildings, the city's public art and its parking fines, and
-OpenHistoricalMap's tram, rail and metro tracks.
+OpenHistoricalMap's tram, rail and metro tracks and Wikidata's stations.
 
 Each WFS layer comes whole in one GetFeature request (no paging); the check below fails if a server ever caps it.
 Licences: see README.
@@ -70,6 +70,26 @@ WHERE {
 }
 GROUP BY ?i ?prt ?labelFi ?labelEn ?fi ?en ?image ?inception
 """
+# The railway and metro stations in Wikidata within Helsinki's box (it takes in some of Espoo and Vantaa; s12_other
+# keeps the city's), with their official opening date (P1619). None in the city carries a closing date.
+STATIONS = """
+SELECT ?i ?fi ?en ?t ?open ?coord WHERE {
+  VALUES ?t { wd:Q55488 wd:Q928830 wd:Q55678 wd:Q18543139 }
+  SERVICE wikibase:box { ?i wdt:P625 ?coord .
+    bd:serviceParam wikibase:cornerSouthWest "Point(24.78 60.10)"^^geo:wktLiteral .
+    bd:serviceParam wikibase:cornerNorthEast "Point(25.26 60.32)"^^geo:wktLiteral . }
+  ?i wdt:P31 ?t .
+  OPTIONAL { ?i wdt:P1619 ?open }
+  OPTIONAL { ?i rdfs:label ?fi FILTER(LANG(?fi) = "fi") } OPTIONAL { ?i rdfs:label ?en FILTER(LANG(?en) = "en") }
+}
+"""
+
+
+def fetch_wdqs(out: Path, query: str):
+    r = requests.post(WDQS, data={"query": query}, headers={**UA, "Accept": "text/csv"}, timeout=600)
+    r.raise_for_status()
+    out.write_bytes(r.content)
+    print(out.stem, "rows", r.text.count("\n") - 1)
 
 
 # Every image of the Helsinki City Museum in Finna (about 83,000), 100 a page; s08_archive matches them by address.
@@ -279,10 +299,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     for server, layer, extra in LAYERS:
         fetch_wfs(out, server, layer, extra)
-    r = requests.post(WDQS, data={"query": QUERY}, headers={**UA, "Accept": "text/csv"}, timeout=600)
-    r.raise_for_status()
-    (out / "wd_buildings.csv").write_bytes(r.content)
-    print("wikidata rows", r.text.count("\n") - 1)
+    fetch_wdqs(out / "wd_buildings.csv", QUERY)
+    fetch_wdqs(out / "wd_stations.csv", STATIONS)
     (out / "energiatodistukset.csv").write_bytes(requests.get(ENERGY_CERTS, headers=UA, timeout=900).content)
     fetch_heights(out / "city_model_heights.csv")
     fetch_demolished(out / "demolished")
