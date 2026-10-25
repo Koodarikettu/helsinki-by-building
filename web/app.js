@@ -975,7 +975,7 @@ async function trackLines(E) {
   E.trackLines = lines;
   return lines;
 }
-// A kind with a file of its own (the City Museum's 9,000 photo places, the houses of 1945–1960) loads its sites now.
+// A kind with a file of its own (the City Museum's 9,000 photo places) loads its sites now.
 async function buildEra(E) {
   if (E.built) return;
   E.built = true;

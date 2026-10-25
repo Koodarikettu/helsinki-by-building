@@ -1,8 +1,8 @@
 """Download the open data into data/raw/: Helsinki's WFS layers, the heights of its 3D city model and the buildings
 it records as demolished, Museovirasto's RKY areas, HSY's solar potential, the public energy certificates, Wikidata's
 buildings, the Helsinki City Museum's photos in Finna, the land front of 1914–1918, Museovirasto's register of
-ancient and historic remains and its protected buildings, the city's public art and its parking fines,
-OpenHistoricalMap's tram, rail and metro tracks and Wikidata's stations, and the City Museum's building inventories.
+ancient and historic remains and its protected buildings, the city's public art and its parking fines, and
+OpenHistoricalMap's tram, rail and metro tracks and Wikidata's stations.
 
 Each WFS layer comes whole in one GetFeature request (no paging); the check below fails if a server ever caps it.
 Licences: see README.
@@ -294,11 +294,6 @@ def fetch_fines(out: Path):
     print("parking fine files", len(FINE_FILES))
 
 
-# The City Museum's building inventories of Lauttasaari, Munkkiniemi, Pohjois-Haaga and Laajasalo (HRI, CC BY 4.0), an
-# Excel workbook in a zip; s12_other takes the veterans' plots of Lauttasaari from it.
-INVENTORIES = "https://www.hel.fi/hel2/tietokeskus/data/helsinki/kulttuuri/20140226_HKM_rakennusinventoinnit.zip"
-
-
 def main():
     out = Path("data/raw")
     out.mkdir(parents=True, exist_ok=True)
@@ -317,9 +312,6 @@ def main():
     fetch_ohm(out / "ohm_trams.json", TRAMS)
     fetch_ohm(out / "ohm_rail.json", RAIL)
     fetch_fines(out / "fines")
-    r = requests.get(INVENTORIES, headers=UA, timeout=300)
-    r.raise_for_status()
-    (out / "hkm_inventoinnit.zip").write_bytes(r.content)
 
 
 if __name__ == "__main__":
