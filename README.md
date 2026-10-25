@@ -30,8 +30,8 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
 - **Other.** The city's 475 works of public art, coloured by period; the tram network of the timeline's year, and its
   railways and metro with their stations, with the tracks closed before it in grey; the Finnish Heritage Agency's and
   the Helsinki City Museum's photos of Helsinki at the places they name; the veterans' blocks of flats
-  (rintamamieskerrostalot) that the neighbourhoods' home-town trails name; and the parking fines of 2014–2023, street
-  by street and year by year, with their commonest reasons.
+  (rintamamieskerrostalot) that the city's municipal reports of the 1950s name, and the terraced houses on Lauttasaari's
+  veterans' plots; and the parking fines of 2014–2023, street by street and year by year, with their commonest reasons.
 - **Quests.** Find buildings from riddles and old photos, and guess their age with the colours switched off.
 
 A non-commercial project, made for curiosity and learning. It is a fork of Alexander Barakov's
@@ -81,7 +81,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 
 | Step | What it does |
 |---|---|
-| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, protected buildings and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram, rail and metro tracks, the public energy certificates, Wikidata's buildings and stations, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna and the city's public art |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, protected buildings and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram, rail and metro tracks, the public energy certificates, Wikidata's buildings and stations, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna, the city's public art and the City Museum's building inventories |
 | `s01_load` | Buildings, standing and demolished → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's or the model's feature id) |
 | `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
 | `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes (the heat source among them), addresses and the city config |
@@ -92,7 +92,7 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
 | `s09_quests` | Resolves the quests (`quests.py`) to buildings and checks every claim against its Wikipedia article |
 | `s10_energy` | Energy labels from the energy certificates and HSY's solar potential, by building |
-| `s12_other` | The Other menu: public art by period, the tram tracks and the railways and metro through time (`trams.bin`, `rail.bin`) with the stations by their opening, the Heritage Agency's and the City Museum's photos by place (`other.json`; the City Museum's places in `hkmphotos/places.json`, loaded when the view opens), the veterans' blocks of flats and the parking fines by street and year (`fines.json`, loaded when the view opens) |
+| `s12_other` | The Other menu: public art by period, the tram tracks and the railways and metro through time (`trams.bin`, `rail.bin`) with the stations by their opening, the Heritage Agency's and the City Museum's photos by place (`other.json`; the City Museum's places in `hkmphotos/places.json`, loaded when the view opens), the veterans' blocks of flats and terraced houses and the parking fines by street and year (`fines.json`, loaded when the view opens) |
 | `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`, the photos scaled in `sathumbs/`) and the war memorials (`war.json`) |
 | `s13_residents` | Well-known people at the Helsinki addresses their Finnish Wikipedia articles name, and Wikidata's links from people to buildings (`data/residents.json`, for `s05_layers`) |
 | `s14_oldmaps` | The City Archives' maps of 1902, 1907, 1910 and 1913 and the National Library's of 1860, 1880 and 1932 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`), and Wikimaps Warper's 1920 and 1935 taken from its WMS into the same tiles |
@@ -298,18 +298,36 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   to one of them ("Uudisraivaajantie 12"). Together the two place 4,818 more of the museum's photos and 77 more
   of the Heritage Agency's. The 9,009 places would add 3.4 MB to the page's start: they come in a file of their own
   (`hkmphotos/places.json`, some 740 KB compressed) when the view first opens, and their photos in 128 shards.
-  The veterans' blocks of flats (rintamamieskerrostalot), which a law of 1949 let companies whose shareholders would
-  have had a right to a veterans' plot build instead, 27 of the 58 companies in Helsinki; Helsingin Sanomat counted 63
-  such buildings in Helsinki in 2010. No open list of them was found. The map has those the home-town trails of
-  Alppiharju, Oulunkylä (Mäkitorppa), Roihuvuori, Länsi-Herttoniemi and Haaga name, gathered by hand in
-  `s12_other.py`, each with the trail's own words. A dot stands on each building whose register address is the one the
-  trail names, a staircase's letter aside (Kivalterintie 17–19 is 17-19a, b and c, the trail's three houses), else on
-  the building under its address point: 33 buildings. The address point alone would misplace some: Lumikintie 7's
-  stands nearer a building of 1960 than the trail's of 1957. A card shows the City Museum's photos of the building
-  that its building card shows (three, of two buildings); the photos the museums place only at a block's address are
-  mostly of something else there (a festival, a view from a window). The history of the company at Aleksis Kiven katu
-  4–8, citing Helsingin Sanomat of 15 July 1950, says blocks were built in Ruskeasuo, Lauttasaari and on
-  Mannerheimintie in Taka-Töölö too, but names no addresses: those are not on the map.
+  The veterans' terraced houses and blocks of flats: the blocks (rintamamieskerrostalot), which § 157 a of the land
+  acquisition act (1949) let companies whose shareholders would have had a right to a veterans' plot build instead.
+  Helsinki's printed municipal reports of 1950–1959 (Kertomus Helsingin kaupungin kunnallishallinnosta, in the City
+  Archives' Yksa service) name them: the 1958 report tabulates the 23 companies of the city's own programme of
+  1951–1958, 54 buildings and 1,780 flats, and the reports of other years lease plots to four more (Aleksis Kiven katu
+  4–8 and a company on Herttoniemi's block 135 plot 2 in 1950, Tilkanrinne in Ruskeasuo in 1954, Maunulanmäki in
+  1959), 27 in all, the number the home-town trails give for Helsinki. Each company is placed on the buildings whose
+  register address is its own, a staircase's letter aside: its name, where that is an address; else the plot the
+  report leases to it, as the register's property ids number it to this day (Majavakulma: block 135 plots 3–5,
+  Majavatie 8 and Hiihtomäentie 30 and 32; Kannelmäki: block 33121 plot 3 and block 33126 plot 3, Kanneltie 10 and 7;
+  Tilkanrinne: block 721 plot 2, Koroistentie 8; the 1950 company: Mäyrätie 9; Maunulanmäki: block 28220, whose three
+  four-storey blocks of 1960 stand on one plot now, Lampuotilantie 34 and 36); else the address another source gives
+  (Portimola: Länsi-Herttoniemi's home-town trail; Jussinkulma and Pitkäjussi: the City Museum's Pohjois-Haaga
+  inventory, whose Pastori Jussilaisen tie 10 and 12 are Ohjaajantie 3 today, by its coordinates). A building at the
+  address finished after 1964 is left out (Isonnevantie 14c, 2017). 65 buildings; the register counts some companies'
+  buildings otherwise than the report (Pitkäjussi: three and five). Two home-town trails name a block the reports do
+  not: Haaga's Santavuorentie 8, where the reports' company of Santavuorentie 4-6-7 stands on the plots of 4, 6 and 7,
+  and Länsi-Herttoniemi's Majavatie 7, whose plot the report of 1952 leases to Asunto-oy Majavatie 7 among the
+  ordinary leases, not under § 157 a; both are left out. The history of Aleksis Kiven katu 4–8 names a block on
+  Mannerheimintie in Taka-Töölö; the reports' only one on Mannerheimintie is no. 71 of 1951, which the register places
+  in Laakso. Besides: the plot the city leased in 1958 to Helsingin Rintamamiesten Maanhankintayhdistys, Helsinki's
+  veterans' land association (Soittajantie 3, five blocks of 1960), and two later veterans' blocks: RM-talo 62 at
+  Suursuontie 10, which Maunula's home-town trail calls a veterans' block for veterans and their widows only, and the
+  RM-talot at Klaavuntie 5 that the City Museum's Puotila inventory gives to the veterans' association's housing
+  society. Asunto Oy RM-talo Kajaaninlinnantie 8 in Puotinharju is known only by its name and is left out. A card
+  quotes the report or the source, and shows the City Museum's photos of the building that its building card shows;
+  the photos the museums place only at a block's address are mostly of something else there. The terraced houses, in
+  their own colour, are the five the City Museum's Lauttasaari inventory puts on the veterans' plots the Tallberg
+  estate sold in 1948; they were built in 1968–2001, and the card says so. No open source was found that names a
+  terraced house built for veterans in Helsinki.
   The parking fines: the city's register of parking violations (Pysäköintivirheet Helsingissä, CC BY 4.0), 2023 from
   the WFS and 2014–2022 from its yearly files (`data/raw/fines/`), 139,000–166,000 fines and notices a year by the
   parking inspectors and the police. These are all the years there are: the data begin in January 2014, and the WFS,
@@ -518,18 +536,21 @@ Data keeps the licence of its source:
   [energy certificate register](https://www.energiatodistusrekisteri.fi/), downloaded on 14 October 2026. No licence stated.
 - Solar potential: HSY, [Pääkaupunkiseudun aurinkosähköpotentiaali](https://hri.fi/data/fi/dataset/paakaupunkiseudun-aurinkosahkopotentiaali),
   WFS layer `ilmasto_ja_energia:rakennukset_aurinkosahkopotentiaali`. CC BY 4.0.
-- Veterans' blocks of flats: the home-town trails (kotikaupunkipolut) of
-  [Alppiharju](https://kaupunginosat.fi/alppila/wp-content/uploads/sites/9/2018/12/alppila_seura_kohteet_161218_nettiin-3.pdf),
-  [Oulunkylä: Mäkitorppa](https://kaupunginosat.fi/oulunkyla/wp-content/uploads/sites/44/2020/11/makitorpan-kaupunkipolku-kartta-ja-teksti.pdf),
-  [Roihuvuori](https://www.roihuvuori.fi/kotikaupunkipolut/),
+- Veterans' blocks of flats: Helsinki City Archives, *Kertomus Helsingin kaupungin kunnallishallinnosta* of
+  [1950, II](https://yksa.disec.fi/Yksa4/download/141570672329500/file/5a7eb072-4d72-47c4-a0a2-c7f05257927a),
+  [1954, I](https://yksa.disec.fi/Yksa4/download/141570680763100/file/efe6056e-cfaf-49c6-92fd-dbf2870196cc),
+  [1958, I](https://yksa.disec.fi/Yksa4/download/141570689944000/file/7db948d5-cccf-4e48-b0c0-0cf076539f82),
+  [1958, II](https://yksa.disec.fi/Yksa4/download/141570691149900/file/77c42e56-00ae-4e3a-a37e-23efe44e6173) (the
+  table, p. 216) and [1959, I](https://yksa.disec.fi/Yksa4/download/141570692405800/file/553f4a88-e0c1-4da4-aa5b-a8c812713706),
+  quoted and linked on each card to the page; the home-town trails of
   [Länsi-Herttoniemi](https://web.archive.org/web/20250116051439/https://kaupunginosat.fi/herttoniemi/wp-content/uploads/sites/19/2017/08/Kaupunkipolut_Lansi_Herttoniemi_Lansi-Herttoniemi.pdf)
-  (gone from the society's site; the Internet Archive's copy) and
-  [Haaga](https://kaupunginosat.fi/etelahaaga/wp-content/uploads/sites/35/2013/06/tiedostot_haagan_kotikaupukipolut_vihko.pdf),
-  quoted and linked on each card; Kyllikki Torkkel's history of
-  [Asunto Oy Aleksis Kivenkatu 4-6-8](https://kaupunginosat.fi/alppila/wp-content/uploads/sites/9/2019/11/Historiikki_AKK468_Torkkel.pdf);
-  and Helsingin Sanomat's article of 2010 ([in Finna](https://www.finna.fi/Record/arto.013512187); not read, only its
-  title is used). Olavi Haimi's *Rintamamiehet rakentajina Helsingissä* (2010), which the trails of Haaga and Roihuvuori
-  list among their sources, was not found online.
+  (the Internet Archive's copy) and [Maunula](https://kaupunginosat.fi/maunula/kotiseutu/kotikaupunkipolku/punainen-reitti/);
+  the City Museum's [Puotila inventory](https://www.hel.fi/static/hkm/pdf/Puotila.pdf) and its Pohjois-Haaga
+  inventory in [Helsinkiläisten rakennusten historiatietoja](https://hri.fi/data/fi/dataset/helsinkilaisten-rakennusten-historiatietoja)
+  (CC BY 4.0); and Helsingin Sanomat's article of 2010 ([in Finna](https://www.finna.fi/Record/arto.013512187); only
+  its title is used). Olavi Haimi's *Rintamamiehet rakentajina Helsingissä* (2010) was not found online.
+- Terraced houses on veterans' plots: Helsinki City Museum, [Helsinkiläisten rakennusten historiatietoja](https://hri.fi/data/fi/dataset/helsinkilaisten-rakennusten-historiatietoja),
+  the building inventory of Lauttasaari (2001–2002). CC BY 4.0.
 - Archive photos and the City Museum photos view: Helsinki City Museum (Helsingin kaupunginmuseo) via the [Finna API](https://api.finna.fi). Public
   domain mark or CC BY 4.0, per photo. The museum asks that the photographer and Helsingin kaupunginmuseo are named;
   the card does, links the Finna record and loads the image from Finna. The app stores only record ids, years,
