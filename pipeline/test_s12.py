@@ -17,6 +17,9 @@ assert place_of(rec("Eurooppa, Suomi, Uusimaa, Helsinki, Vironniemen asemakaava-
 assert place_of(rec("Suomi, Helsinki, Senaatintori Helsinki"), addr, named, spot) == ("Senaatintori", 5.0, 6.0)
 # the most exact part that is known: the open-air museum is not, its island is
 assert place_of(rec("Suomi, Helsinki, Seurasaaren ulkomuseo, Helsinki, Seurasaari, Seurasaaren ulkomuseo"), addr, named, spot) == ("Seurasaari", 7.0, 8.0)
+# the City Museum closes each address with a full stop, and names a place before its address the same way
+assert place_of(rec("Helsinki, Kluuvi Helsinki, Unioninkatu 30."), addr, named, spot) == ("Unioninkatu 30", 1.0, 2.0)
+assert place_of(rec("Helsinki, Kallio Helsinki, Pyöräilystadion. Unioninkatu 30."), addr, named, spot) == ("Unioninkatu 30", 1.0, 2.0)
 assert place_of(rec("Suomi, Helsinki, Helsinki"), addr, named, spot) is None          # the city alone
 assert place_of(rec("Suomi, Kuopio, Senaatintori"), addr, named, spot) is None        # not Helsinki
 assert place_of({"subjectPlaces": ["Helsinki"], "geoLocations": ["POINT(24.94354 60.16664)"]}, addr, named, spot) is None

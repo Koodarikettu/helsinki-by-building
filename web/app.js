@@ -975,9 +975,15 @@ async function trackLines(E) {
   E.trackLines = lines;
   return lines;
 }
+// A kind with a file of its own (the City Museum's 9,000 photo places, the houses of 1945–1960) loads its sites now.
 async function buildEra(E) {
   if (E.built) return;
   E.built = true;
+  const files = E.kinds.filter(K => K.file);
+  await Promise.all(files.map(async K => {
+    K.sites = await fetch(`data/${K.file}`).then(r => r.json());
+    for (const s of K.sites) Object.assign(s, { kind: K, era: E });
+  }));
   for (const K of E.kinds) {
     K.obj = new THREE.Group();
     flat.add(K.obj);
@@ -990,6 +996,7 @@ async function buildEra(E) {
   if (E.lines) E.kinds.find(K => K.id === 'structures').obj.add(await trenchLines(E));  // the land front's own lines
   if (E.tracks) E.kinds[0].obj.add(await trackLines(E));
   if (E.streets) E.kinds[0].obj.add(await fineStreets(E));
+  if (files.length) { showView(); renderPanel(); }  // the dots' visibility and the legend's counts and lists
 }
 // The parking fines lie on the street areas of the street-name view (pipeline/s12_other.py, fines.json, loaded when
 // the view first opens): each street coloured by its fines in the timeline's year, in the eight steps of E.steps (or
@@ -1192,8 +1199,8 @@ function showSite(s, x, y) {
   }
   placeCard(x, y);
 }
-// A place of the Heritage Agency's or the SA-kuva photos carries only its first; the rest come from its kind's shard
-// (mvphotos, saphotos) when its card opens.
+// A place of the Heritage Agency's, the City Museum's or the SA-kuva photos carries only its first; the rest come from
+// its kind's shard (mvphotos, hkmphotos, veteranphotos, saphotos) when its card opens.
 const photoShards = {};
 async function allPhotos(s) {
   const url = `data/${s.kind.shards}/${String(s.shard).padStart(2, '0')}.json`;

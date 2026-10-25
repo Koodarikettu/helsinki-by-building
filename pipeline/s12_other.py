@@ -10,6 +10,11 @@
   that can be found: an address; a building that Wikidata names ("Säätytalo"); a square, park, island or street in
   the city's place-name register ("Senaatintori Helsinki"); or a point Finna gives other than the city's centre. A
   photo naming only the city or a district is left out: it would pile up on the district's middle. One dot per place.
+- The Helsinki City Museum's photos in Finna (PDM, CC BY 4.0) the same way; some 9,000 places, which the page loads
+  when the view opens (hkmphotos/places.json).
+- Veterans' houses: the blocks of flats the neighbourhoods' home-town trails name as veterans' blocks, the houses the
+  City Museum's photos call veterans' houses, the veterans' plots of its Lauttasaari inventory, and the one-dwelling
+  houses the building register dates to 1945–1960, the type's years (veterans.json, loaded when the view opens).
 - Parking fines: the city's parking fines and notices of 2014–2023 (Pysäköintivirheet Helsingissä, CC BY 4.0), by the
   street of their address, for the streets of the street-name view to be coloured by them year by year.
 
@@ -21,28 +26,32 @@ web/data/rail.bin:
 import csv
 import json
 import re
+import zipfile
 import zlib
 from collections import Counter
+from functools import cache
 from pathlib import Path
+from urllib.parse import quote
 
 import geopandas as gpd
 
 import numpy as np
+import pandas as pd
 import shapely
 from pyproj import Transformer
 
+from .codes import RAKEAINE
 from .periods import PERIODS, period_index
 from .s03_tiles import to_local
-from .s08_archive import ADDRESS, keys_of, person
+from .s08_archive import ADDRESS, OPEN, address_index, keys_of, person
 from .s11_war import ART, at, clean, shorten
 
 RAW, OUT = Path("data/raw"), Path("web/data")
 TRAM_COLORS = ("#0f8a4f", "#b9bfc2")  # in use in the timeline's year; closed by then
 MV = dict(label="Finnish Heritage Agency, photos in Finna", label_fi="Museovirasto, kuvat Finnassa", url="https://www.finna.fi",
           licence="CC BY 4.0")
-# A place's photos go to one of these shards (web/data/mvphotos/<nn>.json), which the page loads when its card opens;
-# the page itself carries the places and the first photo of each.
-SHARDS = 32
+HKM = dict(label="Helsinki City Museum, photos in Finna", label_fi="Helsingin kaupunginmuseo, kuvat Finnassa",
+           url="https://www.finna.fi", licence="PDM, CC BY 4.0")
 # The place-name register's kinds that name a spot rather than an area
 SPOTS = {"Puisto", "Tori, katuaukio, aukio", "Saari, luoto, kari(kko), kivi(kko), särkkä", "Niemi, niemeke", "Katu",
          "Liikuntapaikka, urheilualue", "Silta, eritaso", "Satamaterminaali, laituri, venesatama", "Kartano",
@@ -221,7 +230,8 @@ def place_of(r: dict, addr: dict, named: dict, spot: dict, gk25=None, box=None, 
     the place-name register (each looked up from the last, most exact, part of a Helsinki place), else Finna's own
     point, for a name that is no area (`areas`: the register's districts)."""
     for p in r.get("subjectPlaces") or []:
-        parts = [x.strip() for x in p.split(",")]
+        # the City Museum ends a place with its addresses, each closed by a full stop: "Pyöräilystadion. Mäkelänkatu 70."
+        parts = [y for x in p.split(",") for y in re.split(r"\.(?:\s+|$)", x.strip()) if y]
         if not any(x.startswith(("Helsinki", "Helsingfors")) for x in parts):
             continue
         for x in reversed(parts):
@@ -244,8 +254,18 @@ def place_of(r: dict, addr: dict, named: dict, spot: dict, gk25=None, box=None, 
     return None
 
 
-def mv_photos() -> dict:
-    """The Heritage Agency's photos, one dot per place they name."""
+def en(n: int) -> str:
+    return f"{n:,}"
+
+
+def fi(n: int) -> str:
+    return f"{n:,}".replace(",", " ")
+
+
+@cache
+def lookups() -> tuple:
+    """What place_of looks a place up in: the address points, the buildings Wikidata names, the place-name register's
+    spots, and for Finna's own points the transform, the city's box and the districts."""
     names = gpd.read_file(RAW / "Nimisto_piste_rekisteritiedot.geojson")
     # A name that is also a district's means the district ("Töölö" the stop, "Pitäjänmäki" the station), unless the
     # spot is an island or cape ("Seurasaari"). A park named for its district ("Pitäjänmäki") means the district too.
@@ -256,6 +276,8 @@ def mv_photos() -> dict:
     areas -= set(spot)
     pts = gpd.read_file(RAW / "Osoiteluettelo_piste_rekisteritiedot.geojson")
     addr = {k: (p.geometry.x, p.geometry.y) for p in pts.itertuples() for k in keys_of(p.katunimi, str(p.osoitenumero or ""))}
+    for k, v in list(addr.items()):  # a divided plot has only 12a and 12b, and a photo names "Uudisraivaajantie 12"
+        addr.setdefault(re.sub(r"(?<=\d)[a-zåäö]$", "", k), v)
     b = gpd.read_parquet("data/buildings.parquet", columns=["key", "gone", "geometry"])
     centre = dict(zip(b.key, b.geometry.representative_point()))
     named = {}
@@ -263,41 +285,55 @@ def mv_photos() -> dict:
         if r["prt"] in centre and r["labelFi"]:
             named.setdefault(r["labelFi"].lower(), centre[r["prt"]])
     gk25 = Transformer.from_crs(4326, 3879, always_xy=True)
-    lo, hi = gk25.transform(24.78, 60.09), gk25.transform(25.27, 60.33)
+    return addr, named, spot, gk25, (gk25.transform(24.78, 60.09), gk25.transform(25.27, 60.33)), areas
 
-    places = {}
-    for line in open(RAW / "finna_mv.jsonl"):
+
+def photo_places(raw: str, licences: set, folder: str, shards: int, museum: str, credit=None, role=None, keep=None) -> tuple:
+    """A museum's photos in Finna, one dot per place they name (place_of): the places, each with its first photo, the
+    photos placed and the records read. All of a place's photos, oldest first, go to one of `shards` files
+    web/data/<folder>/<nn>.json, keyed by a CRC-32 of its name, which the page loads when its card opens. `credit` names
+    the museum and the collection on each photo (the card's default is the City Museum), `role` the photographer's role
+    in the record (else the first name there is), `keep` picks the records."""
+    places, seen = {}, 0
+    for line in open(RAW / raw):
         r = json.loads(line)
-        if not r.get("images") or r.get("imageRights", {}).get("copyright") != "CC BY 4.0":
+        lic = r.get("imageRights", {}).get("copyright")
+        if not r.get("images") or lic not in licences or keep and not keep(r):
             continue
-        p = place_of(r, addr, named, spot, gk25, (lo, hi), areas)
+        seen += 1
+        p = place_of(r, *lookups())
         if not p:
             continue
         year = int(m[0]) if (m := re.search(r"\d{4}", str(r.get("year") or ""))) else None
         if year and year < 1839:  # before photography: the year of what it shows ("Helsingin tuomiokirkko, 1830")
             year = None
-        maker = next((person(a["name"]) for a in r.get("nonPresenterAuthors") or [] if a.get("name")), None)
+        maker = next((person(a["name"]) for a in r.get("nonPresenterAuthors") or []
+                      if a.get("name") and (role is None or a.get("role") == role)), None)
         coll = next((b["translated"] for b in r.get("buildings") or [] if b["value"].startswith("1/")), None)
         site = places.setdefault(p[0], dict(at=at(p[1], p[2]), name=p[0], photos=[]))
-        site["photos"].append({k: v for k, v in dict(r=r["id"], y=year, t=clean(r.get("title")), m=maker, l="CC BY 4.0",
-                                                      o=f"Museovirasto, {coll}" if coll else "Museovirasto").items() if v})
-    sites, shards = [], [{} for _ in range(SHARDS)]
+        site["photos"].append({k: v for k, v in dict(r=r["id"], y=year, t=clean(r.get("title")), m=maker, l=lic,
+                                                      o=f"{credit}, {coll}" if credit and coll else credit).items() if v})
+    sites, out = [], [{} for _ in range(shards)]
     for s in places.values():
         ph = sorted(s["photos"], key=lambda p: p.get("y") or 9999)  # oldest first, those with no year last
         n, years = len(ph), [p["y"] for p in ph if p.get("y")]
-        shard = zlib.crc32(s["name"].encode()) % SHARDS
-        shards[shard][s["name"]] = ph
+        shard = zlib.crc32(s["name"].encode()) % shards
+        out[shard][s["name"]] = ph
         span = f"{years[0]}–{years[-1]}" if years and years[0] != years[-1] else str(years[0]) if years else ""
         sites.append(dict(at=s["at"], name=s["name"], photos=ph[:1], shard=shard, n=n,
                           sub=" · ".join(filter(None, [span, f"{n} photo{'s' if n > 1 else ''}"])),
                           sub_fi=" · ".join(filter(None, [span, f"{n} kuva{'a' if n > 1 else ''}"])),
-                          url=f"https://www.finna.fi/Search/Results?lookfor={s['name']}&filter%5B%5D=building%3A%220%2FMuseovirasto%2F%22"))
+                          url=f"https://www.finna.fi/Search/Results?lookfor={quote(s['name'])}&filter%5B%5D=building%3A%220%2F{museum}%2F%22"))
     sites.sort(key=lambda s: (-s["n"], s["name"]))  # the most photographed first
-    folder = OUT / "mvphotos"
-    folder.mkdir(exist_ok=True)
-    for i, sh in enumerate(shards):
-        (folder / f"{i:02d}.json").write_text(json.dumps(sh, ensure_ascii=False, separators=(",", ":")))
-    total = sum(s.pop("n") for s in sites)
+    (OUT / folder).mkdir(exist_ok=True)
+    for i, sh in enumerate(out):
+        (OUT / folder / f"{i:02d}.json").write_text(json.dumps(sh, ensure_ascii=False, separators=(",", ":")))
+    return sites, sum(s.pop("n") for s in sites), seen
+
+
+def mv_photos() -> dict:
+    """The Heritage Agency's photos, one dot per place they name."""
+    sites, total, _ = photo_places("finna_mv.jsonl", {"CC BY 4.0"}, "mvphotos", 32, "Museovirasto", credit="Museovirasto")
     return dict(
         id="mvphotos", menu="other", label="Heritage Agency photos", label_fi="Museoviraston kuvat", years="1860s–today",
         years_fi="1860-luvulta tähän päivään",
@@ -315,6 +351,183 @@ def mv_photos() -> dict:
                    "se on kuvatun kohteen vuosi."),
         kinds=[dict(id="mv", label="Places with photos", label_fi="Kuvauspaikat", color="#0a7d8c", menu=False, list=True, source=MV,
                     sites=sites, shards="mvphotos")])
+
+
+def hkm_photos() -> dict:
+    """The City Museum's photos the same way. Their 9,000 places would add megabytes to the page's start: they come in
+    a file of their own (`file`) when the view first opens."""
+    sites, total, seen = photo_places("finna_hkm.jsonl", OPEN, "hkmphotos", 128, "HKM", role="valokuvaaja")
+    (OUT / "hkmphotos" / "places.json").write_text(json.dumps(sites, ensure_ascii=False, separators=(",", ":")))
+    first = min(s["photos"][0]["y"] for s in sites if s["photos"][0].get("y")) // 10 * 10
+    return dict(
+        id="hkmphotos", menu="other", label="City Museum photos", label_fi="Kaupunginmuseon kuvat", years=f"{first}s–today",
+        years_fi=f"{first}-luvulta tähän päivään",
+        text=(f"{en(total)} photos from the Helsinki City Museum's collections, at {en(len(sites))} places they name: an "
+              "address, a building, a square, park, island or street. A card shows all of a place's photos, oldest first, "
+              "with a button for each decade where there are many."),
+        text_fi=(f"{fi(total)} Helsingin kaupunginmuseon kokoelmien kuvaa {fi(len(sites))} paikassa, jotka kuvat nimeävät: "
+                 "osoite, rakennus, tori, puisto, saari tai katu. Kortti näyttää paikan kaikki kuvat vanhimmasta alkaen, ja "
+                 "kun niitä on paljon, jokaiselle vuosikymmenelle on oma painikkeensa."),
+        caveat=(f"Of the museum's {en(seen)} openly licensed images, {en(seen - total)} name only the city or a district, or "
+                "a place that cannot be found, and are left out. A photo stands at the place it names, which may be what it "
+                "shows rather than where it was taken from; an interior stands at its building's address."),
+        caveat_fi=(f"Kaupunginmuseon {fi(seen)} avoimesti lisensoidusta kuvasta {fi(seen - total)} nimeää vain kaupungin tai "
+                   "kaupunginosan tai paikan, jota ei löydy, ja ne on jätetty pois. Kuva on nimeämässään paikassa, joka voi "
+                   "olla kuvan kohde eikä kuvauspaikka; sisäkuva on rakennuksensa osoitteessa."),
+        kinds=[dict(id="hkm", label="Places with photos", label_fi="Kuvauspaikat", color="#2a78d6", menu=False, list=True,
+                    source=HKM, sites=[], file="hkmphotos/places.json", shards="hkmphotos")])
+
+
+# Veterans' houses (rintamamiestalot). The land acquisition act of 1945 gave plots to veterans, the families of the
+# fallen and evacuees; a law of 1949 let housing companies whose shareholders would have had a right to such a plot
+# borrow to build a block of flats instead, 58 of them, 27 in Helsinki. No open list of these blocks was found: these are
+# the ones the neighbourhoods' home-town trails name, each with the trail's own words: (trail, words, addresses).
+TRAILS = {
+    "alppila": ("Alppiharjun kotikaupunkipolku",
+                "https://kaupunginosat.fi/alppila/wp-content/uploads/sites/9/2018/12/alppila_seura_kohteet_161218_nettiin-3.pdf"),
+    "oulunkyla": ("Oulunkylän kotikaupunkipolut: Mäkitorppa",
+                  "https://kaupunginosat.fi/oulunkyla/wp-content/uploads/sites/44/2020/11/makitorpan-kaupunkipolku-kartta-ja-teksti.pdf"),
+    "roihuvuori": ("Roihuvuoren kotikaupunkipolut", "https://www.roihuvuori.fi/kotikaupunkipolut/"),
+    "herttoniemi": ("Länsi-Herttoniemen kotikaupunkipolku",  # gone from the society's site; the Internet Archive's copy
+                    "https://web.archive.org/web/20250116051439/https://kaupunginosat.fi/herttoniemi/wp-content/uploads/sites/19/2017/08/Kaupunkipolut_Lansi_Herttoniemi_Lansi-Herttoniemi.pdf"),
+    "haaga": ("Haagan kotikaupunkipolut",
+              "https://kaupunginosat.fi/etelahaaga/wp-content/uploads/sites/35/2013/06/tiedostot_haagan_kotikaupukipolut_vihko.pdf"),
+}
+OULUNKYLA = "Oulunkylässä on kuusi rintamamieskerrostaloa kaupungin vuokratonteilla."
+BLOCKS = [
+    ("alppila", "Itäpäädyssä kadun maamerkkinä numerossa 4–8 on massiivinen rintamamieskerrostalo vuodelta 1952.",
+     ["Aleksis Kiven katu 4-8"]),
+    ("oulunkyla", f'{OULUNKYLA} Kivalterintie 20 vuodelta 1955, kutsumanimeltään "Kilometritalo" on 130-metrinen rakennus, '
+                  "jossa 90 asuntoa.", ["Kivalterintie 20"]),
+    ("oulunkyla", f'{OULUNKYLA} … Numero 17–19 "Rintamamiestalot" (1956) käsittää 120 asuntoa kolmessa talossa.',
+     ["Kivalterintie 17-19"]),
+    ("oulunkyla", f'{OULUNKYLA} … Alhaalla Pikalähetintiellä numeroissa 14 ja 18 ovat "Monttutalot" (1957), joissa 120 '
+                  "asuntoa kahdessa talossa.", ["Pikalähetintie 14", "Pikalähetintie 18"]),
+    ("roihuvuori", "Rintamamieskerrostaloja on mm. Pohjois-Haagassa, Oulunkylässä ja Länsi-Herttoniemessä sekä "
+                   "Roihuvuoressakin viisi: Lumikintie 7, Prinssintie 4 sekä Roihuvuorentie 5, 7 ja 9.",
+     ["Lumikintie 7", "Prinssintie 4", "Roihuvuorentie 5", "Roihuvuorentie 7", "Roihuvuorentie 9"]),
+    ("herttoniemi", "Rintamamieskerrostaloja on Herttoniemessä kahdeksan: Hiihtomäentie 16, Mäyrätie 7 ja 9, Majavatie 7 "
+                    "sekä Portimopolku 6–12.",
+     ["Hiihtomäentie 16", "Mäyrätie 7", "Mäyrätie 9", "Majavatie 7", "Portimopolku 6-12"]),
+    ("haaga", "Ensimmäiset asuinrakennukset alueliitoksen jälkeen valmistuivat Santavuorentie 3:een ja 5:een vuonna 1952. "
+              "Nämä talot ovat harvinaisia rintamamieskerrostaloja.", ["Santavuorentie 3", "Santavuorentie 5"]),
+    ("haaga", "Niistä huomattava osa on Pohjois-Haagassa: Santavuorentie 4, 6 ja 8, Poutuntie 4,6 ja 8, Näyttelijäntie 3 ja "
+              "5–7 sekä Pastori Jussilaisen tie 4 ja 8.",
+     ["Santavuorentie 4", "Santavuorentie 6", "Santavuorentie 8", "Poutuntie 4", "Poutuntie 6", "Poutuntie 8",
+      "Näyttelijäntie 3", "Näyttelijäntie 5-7", "Pastori Jussilaisen tie 4", "Pastori Jussilaisen tie 8"]),
+]
+TRAIL_SITE = dict(label="Helsinki's home-town trails", label_fi="Helsingin kotikaupunkipolut", url="https://www.kotikaupunkipolut.fi/")
+INVENTORY = dict(label="Helsinki City Museum, building inventory of Lauttasaari (2001–2002)",
+                 label_fi="Helsingin kaupunginmuseo, Lauttasaaren rakennusinventointi (2001–2002)",
+                 url="https://hri.fi/data/fi/dataset/helsinkilaisten-rakennusten-historiatietoja", licence="CC BY 4.0")
+REGISTER = dict(label="City of Helsinki, buildings and their register details", label_fi="Helsingin kaupunki, rakennukset ja rekisteritiedot",
+                url="https://hri.fi/data/en_GB/dataset/helsingin-rakennukset", url_fi="https://hri.fi/data/fi/dataset/helsingin-rakennukset",
+                licence="CC BY 4.0")
+VETERAN_COLORS = ("#e34948", "#2a78d6", "#eda100", "#008300")  # blocks, photos, plots, houses: every pair apart for colour-blind eyes too
+
+
+def veteran_blocks(b, index: dict) -> list:
+    """A dot on each building whose register address is one the trails name, a staircase's letter aside (three for
+    "Kivalterintie 17–19": 17-19a, 17-19b and 17-19c; four for "Portimopolku 6–12"), else on the building under its
+    address point, which may stand nearer a neighbour (Lumikintie 7's), with the trail's words."""
+    b = b[b.gone == 0]
+    own = {}
+    for r in b[b.katunimi_suomi.notna()].itertuples():
+        own.setdefault(f"{r.katunimi_suomi} {re.sub(r'[a-zåäö]$', '', str(r.osoitenumero))}".lower(), []).append(r)
+    by_key = b.set_index("key", drop=False)
+    sites = {}
+    for trail, words, addresses in BLOCKS:
+        for a in addresses:
+            keys = keys_of(*a.rsplit(" ", 1))
+            found = own.get(a.lower()) or [r for k in keys for r in own.get(k, [])] or \
+                [r for _, r in by_key.loc[[index[k] for k in keys if k in index]].iterrows()]
+            if not found:
+                print("veterans' block not found:", a)
+            for r in found:
+                name = f"{r.katunimi_suomi} {r.osoitenumero}" if isinstance(r.katunimi_suomi, str) else a
+                sites.setdefault(r.key, dict(
+                    at=at(*r.geometry.representative_point().coords[0]), name=name.replace("-", "–"),
+                    sub=f"Completed {r.year}", sub_fi=f"Valmistunut {r.year}", text=words,
+                    source=dict(label=TRAILS[trail][0], url=TRAILS[trail][1])))
+    return sorted(sites.values(), key=lambda s: s["name"])
+
+
+def veteran_plots() -> list:
+    """The buildings the City Museum's inventory of Lauttasaari puts on a veterans' plot, with its words, and the year
+    it gives for the building's first use (9999: not known)."""
+    with zipfile.ZipFile(RAW / "hkm_inventoinnit.zip") as z:
+        inv = pd.read_excel(z.open(next(n for n in z.namelist() if n.endswith(".xlsx"))), sheet_name="Lauttasaari")
+    out = []
+    for r in inv[inv.Erityispiirteet.str.contains("rintamamiestontti", na=False)].itertuples():
+        words = clean(r.Erityispiirteet.replace("_x000D_", " "))
+        addr, year = clean(r.Katuosoite), r.Kayttottovuosi if r.Kayttottovuosi < 9999 else None
+        out.append(dict(at=at(r.ikooETRSGK25, r.pkooETRSGK25), name=clean(r.Nimi), text=words[words.index("Tontti on ns."):],
+                        sub=f"{addr} · in use from {year}" if year else addr,
+                        sub_fi=f"{addr} · käytössä vuodesta {year}" if year else addr))
+    return sorted(out, key=lambda s: s["sub"])
+
+
+def veteran_houses(b) -> list:
+    """The one-dwelling houses the register dates to 1945–1960, exactly (a year estimated or rounded is left out)."""
+    h = b[b.c_kayttark.astype(str).str.startswith("011") & b.year.between(1945, 1960) & (b.date_flag == 0) & (b.gone == 0)]
+    out = []
+    for r in h.itertuples():
+        mat = RAKEAINE.get(int(r.c_rakeaine)) if str(r.c_rakeaine).isdigit() else None
+        n = int(r.i_kerrlkm) if r.i_kerrlkm == r.i_kerrlkm else None  # NaN: not given
+        addr = f"{r.katunimi_suomi} {r.osoitenumero}" if isinstance(r.katunimi_suomi, str) else None
+        out.append(dict(at=at(*r.geometry.representative_point().coords[0]), name=addr or "One-dwelling house",
+                        name_fi=addr or "Omakotitalo",
+                        sub=", ".join(filter(None, [f"Completed {r.year}", mat and mat[1].lower(), n and f"{n} floor{'s' if n > 1 else ''}"])),
+                        sub_fi=", ".join(filter(None, [f"Valmistunut {r.year}", mat and mat[0].lower(), n and f"{n} kerros{'ta' if n > 1 else ''}"]))))
+    return out
+
+
+def veterans() -> dict:
+    b = gpd.read_parquet("data/buildings.parquet", columns=["key", "year", "date_flag", "gone", "floors", "i_kerrlkm", "c_kayttark",
+                                                            "c_rakeaine", "katunimi_suomi", "osoitenumero", "geometry"])
+    blocks, plots, houses = veteran_blocks(b, address_index(b)), veteran_plots(), veteran_houses(b)
+    rintama = lambda r: any("rintamamiestalo" in s[0] for s in r.get("subjects") or [] if s)
+    photos, n_photos, _ = photo_places("finna_hkm.jsonl", OPEN, "veteranphotos", 1, "HKM", role="valokuvaaja", keep=rintama)
+    (OUT / "veterans.json").write_text(json.dumps(houses, ensure_ascii=False, separators=(",", ":")))
+    return dict(
+        id="veterans", menu="other", label="Veterans' houses", label_fi="Rintamamiestalot", years="1945–1960", years_fi="1945–1960",
+        text=("After the Continuation War the land acquisition act of 1945 gave plots to veterans, the families of the "
+              "fallen and evacuees, and on them rose the veterans' houses (rintamamiestalo): wooden houses of a few type "
+              "designs, the chimney in the middle and four rooms around it, a habitable attic under the steep roof, often "
+              "put up by the families and their neighbours. A law of 1949 let a housing company whose shareholders would "
+              "have had a right to such a plot build a block of flats instead: 58 companies, 27 of them in Helsinki. The "
+              f"map shows the {len(blocks)} buildings of the veterans' blocks that five neighbourhoods' home-town trails "
+              f"name, the houses the City Museum's photos call veterans' houses ({n_photos} photos), the veterans' plots of "
+              f"its inventory of Lauttasaari, and the {en(len(houses))} one-dwelling houses the building register dates to "
+              "1945–1960, the type's years."),
+        text_fi=("Jatkosodan jälkeen vuoden 1945 maanhankintalaki antoi tontteja rintamamiehille, kaatuneiden omaisille ja "
+                 "evakoille, ja niille nousivat rintamamiestalot: muutaman tyyppipiirustuksen puutaloja, savupiippu keskellä "
+                 "ja neljä huonetta sen ympärillä, jyrkän katon alla asuttava ullakko, usein talkoilla koottuja. Vuoden 1949 "
+                 "laki salli asunto-osakeyhtiön, jonka osakkailla olisi ollut oikeus rintamamiestonttiin, rakentaa sen "
+                 "sijaan kerrostalon: yhtiöitä perustettiin 58, joista 27 Helsinkiin. Kartalla ovat ne "
+                 f"{len(blocks)} rintamamieskerrostalojen rakennusta, jotka viiden kaupunginosan kotikaupunkipolut nimeävät, "
+                 f"talot, joita kaupunginmuseon kuvat kutsuvat rintamamiestaloiksi ({n_photos} kuvaa), museon Lauttasaaren inventoinnin "
+                 f"rintamamiestontit sekä ne {fi(len(houses))} omakotitaloa, jotka rakennusrekisteri ajoittaa vuosiin "
+                 "1945–1960, talotyypin vuosiin."),
+        caveat=("No open list of Helsinki's veterans' houses was found. The trails name the blocks of five neighbourhoods, not "
+                "all the 27 companies' blocks. The register's one-dwelling houses of 1945–1960 are the type's years, not a "
+                "list of veterans' houses: other houses were built then too, and a house whose year the register gives only "
+                "roughly is left out. The buildings on Lauttasaari's veterans' plots are of every age: a card gives the year "
+                "the building was taken into use."),
+        caveat_fi=("Helsingin rintamamiestaloista ei löytynyt avointa luetteloa. Kotikaupunkipolut nimeävät viiden kaupunginosan "
+                   "rintamamieskerrostalot, eivät kaikkia 27 yhtiön taloja. Rekisterin omakotitalot vuosilta 1945–1960 ovat "
+                   "talotyypin vuosia, eivät rintamamiestalojen luettelo: muitakin taloja rakennettiin silloin, ja talo, "
+                   "jonka vuoden rekisteri antaa vain likimäärin, on jätetty pois. Lauttasaaren rintamamiestonttien "
+                   "rakennukset ovat eri ikäisiä: kortti kertoo vuoden, jona rakennus otettiin käyttöön."),
+        sources=[dict(label=label, url=url) for label, url in TRAILS.values()],
+        kinds=[dict(id="blocks", label="Veterans' blocks of flats", label_fi="Rintamamieskerrostalot", color=VETERAN_COLORS[0],
+                    list=True, source=TRAIL_SITE, sites=blocks),
+               dict(id="photos", label="In the City Museum's photos", label_fi="Kaupunginmuseon kuvissa", color=VETERAN_COLORS[1],
+                    list=True, source=HKM, sites=photos, shards="veteranphotos"),
+               dict(id="plots", label="Veterans' plots in Lauttasaari", label_fi="Rintamamiestontit Lauttasaaressa",
+                    color=VETERAN_COLORS[2], list=True, source=INVENTORY, sites=plots),
+               dict(id="houses", label="One-dwelling houses of 1945–1960", label_fi="Omakotitalot 1945–1960", color=VETERAN_COLORS[3],
+                    list=False, source=REGISTER, sites=[], file="veterans.json")])
 
 
 def reason(field: str) -> str:
@@ -427,7 +640,7 @@ def fines() -> dict:
 
 
 def main():
-    eras = [art(), trams(), rail(), mv_photos(), fines()]
+    eras = [art(), trams(), rail(), mv_photos(), hkm_photos(), veterans(), fines()]
     (OUT / "other.json").write_text(json.dumps(dict(eras=eras), ensure_ascii=False, separators=(",", ":")))
     for e in eras:
         print(e["id"], {k["id"]: len(k["sites"]) for k in e["kinds"]})
