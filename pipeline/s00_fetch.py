@@ -33,6 +33,7 @@ LAYERS = [  # (server, layer, extra parameters); saved as data/raw/<layer name>.
     (HEL, "avoindata:Maalinnoitus_yksikot", {}),                     # its structures,
     (HEL, "avoindata:Maalinnoitus_rajaukset", {}),                   # and its strongpoints' outlines
     (HEL, "avoindata:Pysakointivirheet", {}),                        # parking fines, by address and month
+    (HEL, "avoindata:Meritayttoalueet", {}),                         # land filled in from the sea
     (MV, "rajapinta_suojellut:muinaisjaannos_piste", MV_HELSINKI),   # ancient and historic remains
     (MV, "rajapinta_suojellut:muu_kulttuuriperintokohde_piste", MV_HELSINKI),  # other heritage sites
     (MV, "rajapinta_suojellut:rky_alue", NATIONAL),                  # RKY areas

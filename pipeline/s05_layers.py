@@ -166,6 +166,33 @@ def rky():
 
 
 @layer(
+    id="reclaimed", section="Discover", section_fi="Löydä", era="", era_fi="",
+    title="Built on land filled in from the sea", title_fi="Rakennettu mereen täytetylle maalle",
+    # The words of the dataset's own description at HRI (helsingin-meritayttoalueet).
+    text=("Buildings standing where the sea was before it was filled in. The city drew the natural shoreline from old "
+          "maps (the parish map of 1749, Töölö's land survey maps of 1840, the Senate's map of 1870, Lindeman's of 1887, "
+          "Russian topographic maps of about 1907, an aerial photo of 1932, a map of the natural state of 1958 and "
+          "others) and compared it with today's."),
+    text_fi=("Rakennukset, jotka seisovat siellä, missä oli merta ennen täyttöä. Kaupunki on kartoittanut luonnontilaisen "
+             "rantaviivan vanhoista kartoista (1749 pitäjänkartta, 1840 Töölön tiluskartat, 1870 senaatin kartta, 1887 "
+             "Lindemanin kartta, noin 1907 venäläiset topografikartat, 1932 ortoilmakuva, 1958 luonnontilaiskartta ym.) "
+             "ja verrannut sitä nykyiseen rantaviivaan."),
+    caveat=("An estimate drawn for a scale of 1:25,000, as exact as the old maps: a building near the old shore may fall "
+            "on the wrong side. The areas say nothing of when they were filled. Two filled ponds, Tölö träsk and Sörnäs "
+            "träsk, are in too, though they were never the sea."),
+    caveat_fi=("Arvio, jonka suositeltu mittakaava on 1:25 000 ja jossa voi olla vanhojen karttojen epätarkkuuksia: vanhan "
+               "rannan lähellä rakennus voi osua väärälle puolelle. Täyttöjen ajankohtaa aineisto ei kerro. Mukana on myös "
+               "kaksi täytettyä lampea, Tölö träsk ja Sörnäs träsk, vaikka niiden täyttö ei ollut meritäyttöä."),
+    source=("City of Helsinki, reclaimed land in Helsinki", "Helsingin kaupunki, Helsingin meritäyttöalueet",
+            "https://hri.fi/data/fi/dataset/helsingin-meritayttoalueet"),
+    groups=[("fill", "On reclaimed land", "Meritäyttöalueella")],
+)
+def reclaimed():
+    a = gpd.read_file("data/raw/Meritayttoalueet.geojson")
+    return {k: "fill" for k in within(a[["geometry"]]).key}
+
+
+@layer(
     id="wikipedia", section="Discover", section_fi="Löydä", era="", era_fi="",
     title="In Wikipedia", title_fi="Wikipediassa",
     text=("Buildings with an article in the Finnish or English Wikipedia, linked through Wikidata by their "

@@ -13,7 +13,7 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
 - **What Helsinki was meant to become.** The city's master plans and their proposals from 1923 to 2016 and a
   competition entry of 1902 for Töölö on the ground, and its road traffic noise as surveyed in 2012, 2017 and 2022.
 - **Context layers.** The protection the city's plans give a building, the protection the state gives it by law,
-  decree or agreement, the national heritage areas (RKY) it stands in, the buildings in Wikipedia, and who lived here: the homes of well-known people whose Finnish Wikipedia article
+  decree or agreement, the national heritage areas (RKY) it stands in, whether it stands on land filled in from the sea, the buildings in Wikipedia, and who lived here: the homes of well-known people whose Finnish Wikipedia article
   names their Helsinki address, each with the sentence it says so in.
 - **The building's card.** Use, height, floors, structure and facade, architect and style, the Wikipedia extract,
   the City Museum's photos of it through the years, its energy label and solar potential, and why its street is so
@@ -28,7 +28,8 @@ Every building in Helsinki, 85,000 of them, coloured by the year it was complete
   the city at war (SA-kuva) at the places they name. For both, the defences in Museovirasto's register and the
   memorials, each site with a card.
 - **Other.** The city's 475 works of public art, coloured by period; the tram network of the timeline's year, and its
-  railways and metro with their stations, with the tracks closed before it in grey; the Finnish Heritage Agency's and
+  railways and metro with their stations, with the tracks closed before it in grey; the shore through time, the land
+  filled in from the sea coloured by when the city's maps and aerial photos first show it as land; the Finnish Heritage Agency's and
   the Helsinki City Museum's photos of Helsinki at the places they name; the veterans' blocks of flats
   (rintamamieskerrostalot) that the city's municipal reports of the 1950s name, and the terraced houses on Lauttasaari's
   veterans' plots; and the parking fines of 2014–2023, street by street and year by year, with their commonest reasons.
@@ -81,12 +82,12 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 
 | Step | What it does |
 |---|---|
-| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, protected buildings and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram, rail and metro tracks, the public energy certificates, Wikidata's buildings and stations, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna, the city's public art and the City Museum's building inventories |
+| `s00_fetch` | Downloads the City of Helsinki's WFS layers (buildings, land and water, protected buildings, street areas, address points, place names, the land front of 1914–1918, parking fines, land filled in from the sea), roof heights and demolished buildings from its 3D city model, Museovirasto's RKY areas, protected buildings and register of ancient and historic remains (and its page for each defence site), HSY's solar potential, OpenHistoricalMap's tram, rail and metro tracks, the public energy certificates, Wikidata's buildings and stations, the City Museum's, the Heritage Agency's and SA-kuva's photos in Finna, the city's public art and the City Museum's building inventories |
 | `s01_load` | Buildings, standing and demolished → `data/buildings.parquet`, one row per building, keyed by VTJ-PRT (or the city's or the model's feature id) |
 | `s02_attributes` | Completion years (placeholders, rounded decades, missing years), floors, heights |
 | `s03_tiles` | Packs 600 m tiles into 8 bundles, writes per-building attributes (the heat source among them), addresses and the city config |
 | `s04_water` | Water and land polygons |
-| `s05_layers` | Context layers: protected in the local plan, protected by law, decree or agreement, RKY areas, buildings in Wikipedia, who lived here; a bit per group per building |
+| `s05_layers` | Context layers: protected in the local plan, protected by law, decree or agreement, RKY areas, built on reclaimed land, buildings in Wikipedia, who lived here; a bit per group per building |
 | `s06_wiki` | Names, architects, styles, Wikipedia extracts and Commons photos for buildings with a Wikidata item |
 | `s07_labels` | Street names placed along their street areas; why each street is so named and its former names; the street areas for the Street names view |
 | `s08_archive` | Up to six Helsinki City Museum photos per building from Finna, matched by address |
@@ -95,14 +96,15 @@ open data ──► pipeline/ (Python, uv) ──► web/data/ (binary tiles + J
 | `s12_other` | The Other menu: public art by period, the tram tracks and the railways and metro through time (`trams.bin`, `rail.bin`) with the stations by their opening, the Heritage Agency's and the City Museum's photos by place (`other.json`; the City Museum's places in `hkmphotos/places.json`, loaded when the view opens), the veterans' blocks of flats and terraced houses and the parking fines by street and year (`fines.json`, loaded when the view opens) |
 | `s11_war` | The War view, by world war: the land front's lines (`trenches.bin`) and structures, Museovirasto's defence sites dated by their register pages, the City Museum's photos of war damage, SA-kuva's photos by place (`saphotos/`, the photos scaled in `sathumbs/`) and the war memorials (`war.json`) |
 | `s13_residents` | Well-known people at the Helsinki addresses their Finnish Wikipedia articles name, and Wikidata's links from people to buildings (`data/residents.json`, for `s05_layers`) |
+| `s15_shore` | When each part of the land filled in from the sea first shows as land in the city's dated maps and aerial photos, 1870–2025 (`shore.bin`, and `data/shore.json` for `s12_other`) |
 | `s14_oldmaps` | The City Archives' maps of 1902, 1907, 1910 and 1913 and the National Library's of 1860, 1880 and 1932 placed by their control points (`oldmaps.json`) and cut into the ground's tiles (`oldmaps/`), and Wikimaps Warper's 1920 and 1935 taken from its WMS into the same tiles |
 
 ## Run it
 
 ```bash
 uv sync
-for s in s00_fetch s01_load s02_attributes s13_residents s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war s12_other s14_oldmaps; do uv run python -m pipeline.$s; done
-uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11 && uv run python -m pipeline.test_s12 && uv run python -m pipeline.test_s13 && uv run python -m pipeline.test_s14   # years, street names, addresses, energy, war, photos and fines, residents, old maps
+for s in s00_fetch s01_load s02_attributes s13_residents s05_layers s06_wiki s08_archive s09_quests s10_energy s03_tiles s04_water s07_labels s11_war s15_shore s12_other s14_oldmaps; do uv run python -m pipeline.$s; done
+uv run python -m pipeline.test_s02 && uv run python -m pipeline.test_s07 && uv run python -m pipeline.test_s08 && uv run python -m pipeline.test_s10 && uv run python -m pipeline.test_s11 && uv run python -m pipeline.test_s12 && uv run python -m pipeline.test_s13 && uv run python -m pipeline.test_s14 && uv run python -m pipeline.test_s15   # years, street names, addresses, energy, war, photos and fines, residents, old maps, shore
 python3 -m http.server 8642 --directory web
 ```
 
@@ -161,6 +163,24 @@ The local frame is metres from Senaatintori (60.1694 N, 24.9527 E) in ETRS-GK25 
   register marks destroyed matches no standing building: 112 buildings. The card names the site and the building as the register does, the basis and
   the date of the decision where it gives one, and links the register's page.
 - **RKY.** Buildings are matched by location: everything inside an area lights up, new buildings included.
+- **Reclaimed land.** A building is on reclaimed land when its representative point lies inside one of the city's 93
+  fill areas (8.8 km²): 1,424 standing buildings, the Railway Station among them. The areas are the city's estimate,
+  drawn for 1:25,000 by comparing the natural shoreline of old maps (1749–1958) with today's, so a building near the old
+  shore can fall on the wrong side; they carry no date of filling, and include two filled ponds, Tölö träsk and Sörnäs
+  träsk.
+- **The shore through time.** The fill areas carry no dates, so `s15_shore` reads them from the city's own dated maps
+  and aerial photos on its map server: 32 sources from the Senate's map of 1870 to the aerial photos of 2025, each taken
+  in 2 km tiles at 2.5 m a pixel. In each tile and source a pixel is water or land by its 25 nearest pixels in colour and
+  texture among pixels that are surely water (today's sea and lakes, 25 m from the shore) or surely land (today's land
+  outside the fill); in the centre the sources kept tell those apart 93–100% right (1900 and 1964 the least), the
+  ones left out 70–90%. Each pixel of the fill then turns from water to land once, where that disagrees least with all the sources, each
+  weighted by how well it reads its tile, and takes the years of the first source showing it as land and the last before
+  it showing water; a 9-pixel median smooths them. The view colours a part by the period of the first, and draws it pale
+  between the two. 855 ha in 7,074 parts; 120 ha was land in 1870 already. A tile with too little sure water (a filled
+  pond in Pasila, with no sea near) is read again with a 2 km margin. Left out: the parish map of 1749, whose water and
+  land are one colour, and the reconnaissance map of 1780–1782, placed some 100 m off; the town plans of 1820, 1838 and
+  1878, which draw the planned blocks (the 1820 plan lays streets over Kluuvi bay); and the bird's-eye drawing of 2014.
+  What is land in 1870 was filled earlier, and when is not read: the map shows it as filled before 1870, pale before.
 - **Wikidata.** Items are linked by the permanent building identifier (P3824 = VTJ-PRT): 4,641 items on 4,575
   buildings, 14 of them demolished. Most give a name and a completion year (which matches the register for 3,513 of 4,245 buildings; 148
   differ by more than ten years, mostly the register being later; not used). Extracts are the article's
@@ -467,6 +487,8 @@ Data keeps the licence of its source:
   WFS layer `avoindata:Rakennukset_alue_rekisteritiedot`. CC BY 4.0.
 - Land and water: City of Helsinki, [Helsingin maa- ja vesialueet](https://hri.fi/data/en_GB/dataset/helsingin-maa-ja-vesialueet),
   WFS layers `Maavesi_manner`, `Maavesi_saaret`, `Maavesi_merialue`, `Maavesi_muut_vesialueet`. CC BY 4.0.
+- Reclaimed land: City of Helsinki, [Helsingin meritäyttöalueet](https://hri.fi/data/fi/dataset/helsingin-meritayttoalueet),
+  WFS layer `Meritayttoalueet` (updated 16 June 2025, downloaded 2 November 2026). CC BY 4.0.
 - Attribution, as the city asks: "Data and maps © City of Helsinki, City Survey Services" ("Data ja kartat (c) Helsingin
   kaupunki, kaupunkimittauspalvelut"). Downloaded via Helsinki Region Infoshare on 14 October 2026.
 - Protected buildings: City of Helsinki, [Asemakaavoilla suojellut rakennukset ja alueet Helsingissä](https://hri.fi/data/fi/dataset/asemakaavoilla-suojellut-rakennukset-ja-alueet-helsingissa),

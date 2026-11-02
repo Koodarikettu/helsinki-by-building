@@ -669,7 +669,8 @@ def fines() -> dict:
 
 
 def main():
-    eras = [art(), trams(), rail(), mv_photos(), hkm_photos(), veterans(), fines()]
+    eras = [art(), trams(), rail(), json.loads(Path("data/shore.json").read_text()),  # s15_shore
+            mv_photos(), hkm_photos(), veterans(), fines()]
     (OUT / "other.json").write_text(json.dumps(dict(eras=eras), ensure_ascii=False, separators=(",", ":")))
     for e in eras:
         print(e["id"], {k["id"]: len(k["sites"]) for k in e["kinds"]})

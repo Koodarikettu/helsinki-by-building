@@ -21,7 +21,8 @@ def polygons(geom):
     return [g for g in getattr(geom, "geoms", [geom]) if g.geom_type == "Polygon" and not g.is_empty]
 
 
-def pack(geoms) -> bytes:
+def pack(geoms, extra: bytes = b"") -> bytes:
+    """`extra` (a multiple of 4 bytes) goes between the ring table and the vertices: s15_shore's years."""
     ring_start, vert_start, verts = [0], [0], []
     for poly in geoms:
         for ring in [poly.exterior, *poly.interiors]:
@@ -33,7 +34,7 @@ def pack(geoms) -> bytes:
         ring_start.append(len(vert_start) - 1)
     V = np.concatenate(verts)
     return (struct.pack("<3I", len(ring_start) - 1, len(vert_start) - 1, len(V))
-            + np.array(ring_start, "<u4").tobytes() + np.array(vert_start, "<u4").tobytes() + V.tobytes())
+            + np.array(ring_start, "<u4").tobytes() + np.array(vert_start, "<u4").tobytes() + extra + V.tobytes())
 
 
 def main():
