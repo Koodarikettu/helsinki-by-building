@@ -175,13 +175,18 @@ function goHome() {
 }
 goHome();
 
-// Land and water: flat polygons in the local frame (see pipeline/s04_water.py).
-async function loadPolygons(url) {
+// Land and water: flat polygons in the local frame (see pipeline/s04_water.py); the shore's carry years and a colour
+// between the ring table and the vertices (s15_shore.py).
+async function loadShapes(url, dated) {
   const buf = await (await fetch(url)).arrayBuffer();
   const [nPoly, nRing, nVert] = new Uint32Array(buf, 0, 3);
   const ringStart = new Uint32Array(buf, 12, nPoly + 1);
   const vertStart = new Uint32Array(buf, 12 + 4 * (nPoly + 1), nRing + 1);
-  const xz = new Float32Array(buf, 12 + 4 * (nPoly + 1) + 4 * (nRing + 1), 2 * nVert);
+  let at = 12 + 4 * (nPoly + 1) + 4 * (nRing + 1);
+  const years = dated && { from: new Int16Array(buf, at, nPoly), to: new Int16Array(buf, at + 2 * nPoly, nPoly),
+    kind: new Uint8Array(buf, at + 4 * nPoly, nPoly) };
+  if (dated) at += Math.ceil(5 * nPoly / 4) * 4;
+  const xz = new Float32Array(buf, at, 2 * nVert);
   const ring = r => {
     const pts = [];
     for (let v = vertStart[r]; v < vertStart[r + 1]; v++) pts.push(new THREE.Vector2(xz[2 * v], -xz[2 * v + 1]));
@@ -193,7 +198,10 @@ async function loadPolygons(url) {
     for (let r = ringStart[p] + 1; r < ringStart[p + 1]; r++) shape.holes.push(new THREE.Path(ring(r)));
     shapes.push(shape);
   }
-  const g = new THREE.ShapeGeometry(shapes);
+  return { shapes, ...years };
+}
+async function loadPolygons(url) {
+  const g = new THREE.ShapeGeometry((await loadShapes(url)).shapes);
   g.rotateX(-Math.PI / 2);
   return g;
 }
@@ -972,8 +980,38 @@ async function trackLines(E) {
     lines.geometry = new LineSegmentsGeometry().setPositions(pos).setColors(color);
   };
   lines.update(uniforms.uYear.value);
-  E.trackLines = lines;
+  E.yearly = lines;
   return lines;
+}
+// The shore through time (pipeline/s15_shore.py): each part of the land filled in from the sea is sea until the last
+// source that shows water there, pale until the first that shows land, and in its legend's colour from then on.
+async function fillMesh(E) {
+  const { shapes, from, to, kind } = await loadShapes(`data/${E.fill}`, true);
+  const pos = [], index = [], span = [0];
+  for (const s of shapes) {
+    const g = new THREE.ShapeGeometry(s), a = g.attributes.position.array, base = pos.length / 3;
+    for (let i = 0; i < a.length; i += 3) pos.push(a[i], 0.2, -a[i + 1]);
+    for (const i of g.index.array) index.push(base + i);
+    span.push(pos.length / 3);
+    g.dispose();
+  }
+  const geo = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+    .setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(pos.length), 3)).setIndex(index);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false }));
+  const cols = E.legend.map(g => col(g.color)), pale = cols.map(c => c.clone().lerp(col(LAND), 0.6)), sea = col(WATER);
+  mesh.update = year => {
+    if (Math.floor(year) === mesh.year) return;
+    mesh.year = Math.floor(year);
+    const c = geo.attributes.color;
+    for (let p = 0; p < shapes.length; p++) {
+      const k = mesh.year >= to[p] ? cols[kind[p]] : mesh.year >= from[p] ? pale[kind[p]] : sea;
+      for (let v = span[p]; v < span[p + 1]; v++) k.toArray(c.array, 3 * v);
+    }
+    c.needsUpdate = true;
+  };
+  mesh.update(uniforms.uYear.value);
+  E.yearly = mesh;
+  return mesh;
 }
 // A kind with a file of its own (the City Museum's 9,000 photo places) loads its sites now.
 async function buildEra(E) {
@@ -995,6 +1033,7 @@ async function buildEra(E) {
   }
   if (E.lines) E.kinds.find(K => K.id === 'structures').obj.add(await trenchLines(E));  // the land front's own lines
   if (E.tracks) E.kinds[0].obj.add(await trackLines(E));
+  if (E.fill) E.kinds[0].obj.add(await fillMesh(E));
   if (E.streets) E.kinds[0].obj.add(await fineStreets(E));
   if (files.length) { showView(); renderPanel(); }  // the dots' visibility and the legend's counts and lists
 }
@@ -1112,7 +1151,7 @@ const viewShown = () => viewNow() ? viewKinds(viewNow()) : [];
 const notYet = s => s.from > uniforms.uYear.value;
 function showView() {
   const shown = viewShown();
-  viewNow()?.trackLines?.update(uniforms.uYear.value);
+  viewNow()?.yearly?.update(uniforms.uYear.value);
   for (const K of shown) if (K.geo && K.sites[0]?.from) {
     const n = K.sites.findIndex(notYet);
     K.geo.setDrawRange(0, n < 0 ? K.sites.length : n);
@@ -1907,7 +1946,7 @@ function renderPanel() {
       <p class="layer-era">${esc(tr(E, 'years'))}${viewKind ? ` · ${esc(label(E.groups?.[viewKind] || shown[0]))}` : ''}</p>
       <div class="layer-detail"><p>${esc(tr(E, 'text'))}</p></div>
       ${dots.length ? `<h2 class="section">${t('On the map')}</h2><div class="energy-scale">${dots.map(K => row(K.color, esc(label(K)), K.sites.length)).join('')}</div>` : ''}
-      ${land || E.tracks ? `<h2 class="section">${esc(tr(E, 'linesTitle'))}</h2><div class="energy-scale">${E.legend.map(g => row(g.color, esc(tr(g, 'label')), g.n)).join('')}</div>` : ''}
+      ${land || E.tracks || E.fill ? `<h2 class="section">${esc(tr(E, 'linesTitle'))}</h2><div class="energy-scale">${E.legend.map(g => row(g.color, esc(t(tr(g, 'label'))), g.n)).join('')}</div>` : ''}
       ${E.streets ? fineLegend(E, row) : ''}
       ${lists.length ? `<input class="filter" type="search" placeholder="${t('Find a site')}" aria-label="${t('Find a site')}">` : ''}
       ${lists.map(([title, list], j) => `<h2 class="section">${esc(title)}</h2><ul class="stories">${list.map((x, i) => `
